@@ -1,0 +1,24 @@
+nc: 16  # Number of classes in your dataset
+depth_multiple: 0.33  # Model depth scaling factor
+width_multiple: 0.50  # Model width scaling factor
+
+backbone:
+  [
+    [-1, 1, Conv, [32, 3, 1]],  # First conv layer
+    [-1, 1, C2f_DWRB, [64]],  # Custom residual block
+    [-1, 1, SADown, []],  # Spatial Attention Downsampling
+    [-1, 1, C2f_DWRB, [128]],
+    [-1, 1, SADown, []],
+    [-1, 1, C2f_DWRB, [256]],
+  ]
+
+neck:
+  [
+    [-1, 1, LASPPF, [256]],  # Large Adaptive SPPF
+  ]
+
+head:
+  [
+    [-1, 1, Conv, [128, 1, 1]],
+    [-1, 1, nn.Conv2d, [128, 6, 1]],  # Final classification head
+  ]

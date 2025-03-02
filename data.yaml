@@ -1,0 +1,7 @@
+path: 
+train: images/Training_data
+val: images/Validation_data
+
+
+nc: 16  # Number of classes
+names: ["crazing", "inculsion","patches","pitted_surface","rolled_in_scale","scratches","1_chongkong", "2_hanfeng","3_yueyawan","4_shuiban","5_youban","6_siban","7_yiwu","8_yahen","9_zhehen","10_yaozhed"]
