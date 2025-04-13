@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
 import numpy as np 
-
+from flask import send_file
+from io import BytesIO
+from PIL import Image
 import glob
 import cv2
 import os
@@ -159,6 +161,27 @@ def extract_yolo_features(image):
     feat_vector = torch.nn.functional.adaptive_avg_pool2d(feat_tensor, 1).view(feat_tensor.shape[0], -1)
     return feat_vector.squeeze().numpy()
 
+def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), text_color=(255, 255, 255)):
+    print("labels are hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+    #print(list(labels[0]))
+    img = cv2.imread(img_path)
+    img_copy = img.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.5
+    thickness = 2
+
+    for i, (x1, y1, x2, y2) in enumerate(det_boxes):
+        label = str(labels[i])#labels[i]
+
+        # Draw rectangle
+        cv2.rectangle(img_copy, (x1, y1), (x2, y2), box_color, thickness)
+
+        # Put label text
+        cv2.putText(img_copy, label, (x1, y1 - 10), font, font_scale, text_color, thickness, cv2.LINE_AA)
+    
+    #img_copy.save("test.jpg")
+
+    return img_copy
 
 # === Thermal conversion ===
 def convert_to_thermal(img_gray):
@@ -167,6 +190,7 @@ def convert_to_thermal(img_gray):
 # === Main pipeline ===
 @app.route('/upload', methods=['POST'])
 def process_images():
+    bounding_box_dict = {}
     image_folder = "uploads"
     os.makedirs(image_folder, exist_ok=True)
     if 'image' not in request.files:
@@ -201,9 +225,12 @@ def process_images():
         #gt_boxes, gt_labels = parse_yolo_txt_annotation(annot_path, w, h)
 
         results = model(original_color, conf=0.5)
+        print("________________________________________________________________________")
+        print(results)
         det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
 
         for x1, y1, x2, y2 in det_boxes:
+            bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=""
             norm_crop = original_color[y1:y2, x1:x2]
             thermal_crop = thermal[y1:y2, x1:x2]
             if norm_crop.size == 0 or thermal_crop.size == 0:
@@ -242,6 +269,7 @@ def process_images():
     pca = joblib.load("pca.pkl")
     svm_model = joblib.load("svm_model.pkl")
     le = joblib.load("label_encoder.pkl")
+    
     X_new = df.drop(columns=["target"], errors='ignore')
 
     # Scale and reduce dimensionality
@@ -254,9 +282,24 @@ def process_images():
     # Add to the dataframe
     df["svm_pred"] = predicted_classes
     df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
+    
+    for i,(x1, y1, x2, y2) in enumerate(det_boxes):
+        
+        bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=df["svm_pred_label"].iloc[i]
+    final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
+    #print(final_img)
 
     print("✅ Predictions added to dataframe!")
-    return jsonify({'features': df.to_dict(orient='records')})
+    image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(image_rgb)
+
+    # Save image to in-memory buffer
+    buffer = BytesIO()
+    pil_image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    # Return as file
+    return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
 
 # === Run pipeline ===
 #df_combined = process_images("images/Testing_data")
