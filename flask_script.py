@@ -139,6 +139,7 @@ def extract_glcm_features(img):
     df['Contrast5'] = GLCM_contr5
 
     df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
+    #print(df.columns)
     return df.values.flatten()
 
 
@@ -163,7 +164,7 @@ def extract_yolo_features(image):
 
 def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), text_color=(255, 255, 255)):
     print("labels are hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
-    #print(list(labels[0]))
+    print(list(labels))
     img = cv2.imread(img_path)
     img_copy = img.copy()
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -220,13 +221,13 @@ def process_images():
 
         h, w = original.shape
         thermal = convert_to_thermal(original)
-        original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR)
+        original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2RGB)
 
         #gt_boxes, gt_labels = parse_yolo_txt_annotation(annot_path, w, h)
 
-        results = model(original_color, conf=0.5)
+        results = model(original_color, conf=0.25)
         print("________________________________________________________________________")
-        print(results)
+        #print(results)
         det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
 
         for x1, y1, x2, y2 in det_boxes:
@@ -251,9 +252,11 @@ def process_images():
     # Build DataFrame
     yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
     # Column names for GLCM features
-    glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
-             'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
-             'Energy3', 'Corr3', 'Diss_sim3', 'Contrast3', 'Energy4']
+    
+    glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast', 'Energy2', 'Corr2',
+       'Diss_sim2', 'Homogen2', 'Contrast2', 'Energy3', 'Corr3', 'Diss_sim3',
+       'Contrast3', 'Energy4']
+    #.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
     df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
 
     

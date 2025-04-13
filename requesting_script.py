@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 
 # Path to the image you want to upload
-image_path = 'images/Training_data/crazing_1.jpg'  # Change this to your test image
+image_path = 'svmtest/pitted_surface_170.jpg'  # Change this to your test image
 
 # Endpoint URL
 url = 'http://127.0.0.1:5000/upload'
