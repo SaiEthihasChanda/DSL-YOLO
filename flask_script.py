@@ -10,6 +10,8 @@ from PIL import Image
 import glob
 import cv2
 import os
+import zipfile
+import io
 
 import pandas as pd
 from skimage.filters import sobel
@@ -69,10 +71,12 @@ def parse_yolo_txt_annotation(txt_path, img_width, img_height):
 
 # === GLCM feature extractor ===
 def extract_glcm_features(img):
+    img = cv2.resize(img, (800, 800))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
     #img = np.array(img)
 
-    image_dataset = pd.DataFrame()
+    #image_dataset = pd.DataFrame()
 
     
 
@@ -138,15 +142,15 @@ def extract_glcm_features(img):
     GLCM_contr5 = graycoprops(GLCM5, 'contrast')[0]
     df['Contrast5'] = GLCM_contr5
 
-    df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
-    #print(df.columns)
+    #df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
     return df.values.flatten()
 
 
 # === YOLO feature extractor ===
 
 def extract_yolo_features(image):
-    im = cv2.resize(image, (640, 640))
+    im = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    im = cv2.resize(im, (640, 640))
     im = im.astype(np.float32) / 255.0
     im = torch.from_numpy(im.transpose(2, 0, 1)).unsqueeze(0)
 
@@ -161,7 +165,6 @@ def extract_yolo_features(image):
     feat_tensor = features[0].cpu()  # optionally move to CPU before converting to numpy
     feat_vector = torch.nn.functional.adaptive_avg_pool2d(feat_tensor, 1).view(feat_tensor.shape[0], -1)
     return feat_vector.squeeze().numpy()
-
 def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), text_color=(255, 255, 255)):
     print("labels are hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
     print(list(labels))
@@ -188,26 +191,25 @@ def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), t
 def convert_to_thermal(img_gray):
     return cv2.applyColorMap(img_gray, cv2.COLORMAP_INFERNO)
 
-# === Main pipeline ===
-@app.route('/upload', methods=['POST'])
-def process_images():
+
+def process_images_folder(image,filename):
     bounding_box_dict = {}
     image_folder = "uploads"
     os.makedirs(image_folder, exist_ok=True)
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image uploaded'}), 400
+    
 
-    file = request.files['image']
-    filename = secure_filename(file.filename)
+    file = image
+    filename = filename
+    print("filename",filename)
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     image_folder = os.path.join(UPLOAD_FOLDER,filename)
-    print("LOOOOOOOOOOOOOOOOOK HEEEEEEEEEEEEEEEEEEEEEEEEEEEREEEEEEEEE")
+    print("inge paaru da loosu")
     print(image_folder)
     file.save(image_folder)
     all_data = []
     all_targets = []
 
-    for file in tqdm(os.listdir("uploads"), desc="Processing"):
+    for file in tqdm(os.listdir("uploads"), desc="Processing folder image"):
         if not file.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
 
@@ -225,7 +227,7 @@ def process_images():
 
         #gt_boxes, gt_labels = parse_yolo_txt_annotation(annot_path, w, h)
 
-        results = model(original_color, conf=0.25)
+        results = model(original_color, conf=0.05, iou=0.0, agnostic_nms=True)
         print("________________________________________________________________________")
         #print(results)
         det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
@@ -292,6 +294,115 @@ def process_images():
     final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
     #print(final_img)
 
+    
+
+    # Return as file
+    return final_img
+
+
+
+
+
+# === Main pipeline ===
+@app.route('/Metal_surface_pred', methods=['POST'])
+def process_images():
+    bounding_box_dict = {}
+    image_folder = "uploads"
+    os.makedirs(image_folder, exist_ok=True)
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    file = request.files['image']
+    filename = secure_filename(file.filename)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    image_folder = os.path.join(UPLOAD_FOLDER,filename)
+    print("LOOOOOOOOOOOOOOOOOK HEEEEEEEEEEEEEEEEEEEEEEEEEEEREEEEEEEEE")
+    print(image_folder)
+    file.save(image_folder)
+    all_data = []
+    all_targets = []
+
+    for file in tqdm(os.listdir("uploads"), desc="Processing"):
+        if not file.lower().endswith((".jpg", ".jpeg", ".png")):
+            continue
+
+        filename = os.path.splitext(file)[0]
+        img_path = os.path.join(image_folder)
+        #annot_path = os.path.join(annotation_folder, filename + ".txt")
+
+        original = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if original is None:
+            continue
+
+        h, w = original.shape
+        thermal = convert_to_thermal(original)
+        original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR)
+
+        #gt_boxes, gt_labels = parse_yolo_txt_annotation(annot_path, w, h)
+
+        results = model(original_color, conf=0.05, iou=0.0, agnostic_nms=True)
+        print("________________________________________________________________________")
+        #print(results)
+        det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
+
+        for x1, y1, x2, y2 in det_boxes:
+            norm_crop = original_color[y1:y2, x1:x2]
+            thermal_crop = thermal[y1:y2, x1:x2]
+            
+            if norm_crop.size == 0 or thermal_crop.size == 0:
+                continue
+
+            yolo_vec = extract_yolo_features(norm_crop)
+            glcm_vec = extract_glcm_features(thermal_crop)
+            row = list(yolo_vec) + list(glcm_vec)
+            all_data.append(row)
+
+    # Build DataFrame
+    # Build DataFrame
+    yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
+    # Column names for GLCM features
+    glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
+             'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
+             'Energy3', 'Corr3', 'Diss_sim3', 'Homogen3','Contrast3', 
+                'Energy4', 'Corr4', 'Diss_sim4', 'Homogen4', 'Contrast4',
+                'Energy5', 'Corr5', 'Diss_sim5', 'Homogen5', 'Contrast5']
+    df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
+    df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
+
+    
+
+    # 2. Combine feature vectors into a row
+    #row = list(yolo_vec) + list(glcm_vec)
+
+# 3. When all rows are ready, construct DataFrame
+    
+    #df = pd.DataFrame(all_data)
+    print("✅ Final feature matrix shape:", df.shape)
+    print(df)
+    scaler = joblib.load("scaler.pkl")
+    pca = joblib.load("pca.pkl")
+    svm_model = joblib.load("svm_model.pkl")
+    le = joblib.load("label_encoder.pkl")
+    
+    X_new = df.drop(columns=["target"], errors='ignore')
+
+    # Scale and reduce dimensionality
+    X_scaled = scaler.transform(X_new)
+    X_pca = pca.transform(X_scaled)
+    #print(X_pca.head())
+    # Predict using the trained SVM model
+    predicted_classes = svm_model.predict(X_pca)
+
+    # Add to the dataframe
+    df["svm_pred"] = predicted_classes
+    df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
+    
+    for i,(x1, y1, x2, y2) in enumerate(det_boxes):
+        
+        bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=df["svm_pred_label"].iloc[i]
+    final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
+    #print(final_img)
+
     print("✅ Predictions added to dataframe!")
     image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(image_rgb)
@@ -304,8 +415,60 @@ def process_images():
     # Return as file
     return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
 
-# === Run pipeline ===
-#df_combined = process_images("images/Testing_data")
+
+@app.route('/Metal_surface_pred_folder', methods=['POST'])
+def handle_zip_folder():
+    # Check if 'folder' was uploaded
+    if 'folder' not in request.files:
+        return jsonify({'error': 'No zip file part'}), 400
+
+    zip_file = request.files['folder']  # This is the uploaded zip file
+    
+    # Wrap it in a BytesIO object
+    zip_bytes = io.BytesIO(zip_file.read())
+
+    # Open the ZIP archive in memory
+    with zipfile.ZipFile(zip_bytes, 'r') as zip_ref:
+        # List of files in zip
+        file_list = zip_ref.namelist()
+        #print("Files in ZIP:", file_list)
+        output_zip_buffer = io.BytesIO()
+
+        # Loop through files inside zip
+        for filename in file_list:
+            if filename.endswith('.jpg') or filename.endswith('.png'):
+                # Read the image data
+                with zip_ref.open(filename) as file:
+                    image_data = file.read()
+
+                    # Optional: load image using PIL or OpenCV without saving
+                    image = Image.open(io.BytesIO(image_data))
+                    #print(f"Loaded image: {filename}, Size: {image.size}")
+                    processed_image = process_images_folder(image,filename)
+                    
+
+                    # Save the processed image into output zip
+                    img_byte_arr = io.BytesIO()
+                    processed_image.save(img_byte_arr, format='jpg')
+                    img_byte_arr.seek(0)
+
+                    output_zip.writestr(f"processed_{filename}", img_byte_arr.read())
+
+                    # You can now pass 'image' to your processing functions
+                    # process_image(image)
+    output_zip_buffer.seek(0)
+
+    return send_file(
+        output_zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='processed_images.zip'
+    )
+
+    
+
+
+
 @app.route('/')
 def index():
     return "YOLO + GLCM Flask API is running!"
