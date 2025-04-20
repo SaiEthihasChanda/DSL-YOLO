@@ -1,12 +1,44 @@
+import streamlit as st
 import requests
-import pandas as pd
-import os
 import io
 import zipfile
+import os
+import warnings
 
-# Path to the image you want to upload
-image_path = 'Data/NEU-DET/NEU-DET/IMAGES/crazing_1.jpg'  # Change this to your test image
-folder_path = 'svmtest'
+
+warnings.filterwarnings("ignore")
+
+
+try:
+    from requests.packages import urllib3
+    urllib3.disable_warnings()
+except ImportError:
+    pass
+
+
+st.set_page_config(page_title="Metal Surface Defect Detection", layout="wide")
+
+
+st.markdown(
+    """
+    <style>
+    .centered-title {
+        text-align: center;
+        color: blue;  /* Set text color to blue */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+st.markdown('<h1 class="centered-title">Metal Surface Defect Detection</h1>', unsafe_allow_html=True)
+st.markdown("Upload an image or a folder to detect defects on metal surfaces using machine learning.")
+
+
+url = 'http://127.0.0.1:5000/Metal_surface_pred'
+folder_url = 'http://127.0.0.1:5000/Metal_surface_pred_folder'
+
 
 def zip_folder_in_memory(folder_path):
     zip_buffer = io.BytesIO()
@@ -19,46 +51,42 @@ def zip_folder_in_memory(folder_path):
     zip_buffer.seek(0)
     return zip_buffer
 
-# Endpoint URL
-url = 'http://127.0.0.1:5000/Metal_surface_pred'
-test_url = 'http://127.0.0.1:5000/'
-folder_url = 'http://127.0.0.1:5000/Metal_surface_pred_folder'
 
-test_response=requests.get(test_url)
-print(test_response.content)
-
-# Send POST request with image
-with open(image_path, 'rb') as img_file:
-    files = {'image': img_file}
-    response = requests.post(url, files=files)
+st.subheader("Upload Images")
+uploaded_image = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 
-# Check if the request was successful
-if response.status_code == 200:
-    print("Request successful!")
-    with open('kkkkkkkkkkkkkkkkkkkk.png', 'wb') as f:
-        f.write(response.content)
+with st.container():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        analyze_button = st.button("Analyze Image")
 
-    # Parse the JSON response
-    
-    
-    # Check if the response contains the 'features' key
-    
-else:
-    print(f"Request failed with status code {response.status_code}")
 
-#zip_data = zip_folder_in_memory(folder_path)
-#files = {'folder': ('svmtest.zip', zip_data, 'application/zip')}
-#folder_response = requests.post(folder_url, files=files)
-#print(folder_response.content)
+with st.container():
+    col1, col2, col3 = st.columns([1, 2, 1]) 
+    if uploaded_image is not None and analyze_button:
+        with st.spinner("Analyzing..."):
+            files = {'image': uploaded_image}
+            response = requests.post(url, files=files)
+            
+            if response.status_code == 200:
+                with col1:
+                    st.success("Request successful!")
+            else:
+                with col1:
+                    st.error(f"Request failed with status code {response.status_code}")
 
-#if response.status_code == 200:
-   # extract_folder = 'processed_images'
- #   os.makedirs(extract_folder, exist_ok=True)
 
-  #  with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-  #      z.extractall(extract_folder)
+if uploaded_image is not None:
+    with st.container():
+        col1, col2, col3 = st.columns([2, 1, 2]) 
+        with col1:
+            st.image(uploaded_image, caption="Uploaded Image", width=800, use_container_width=True)
+        
+        if analyze_button and response.status_code == 200:
+            with col3:
+                st.image(response.content, caption="Processed Image", width=800, use_container_width=True)
 
-   # print(f"✅ Extracted and saved to '{extract_folder}'")
-#else:
-    #print(f"❌ Request failed with status code {response.status_code}")
+
+st.markdown("---")
+st.markdown("Made by Sai Ethihas Chanda | currently hosted at http://127.0.0.1:5000")

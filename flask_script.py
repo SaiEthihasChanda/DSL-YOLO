@@ -21,7 +21,7 @@ from tqdm import tqdm
 from ultralytics import YOLO
 import torch
 import joblib
-# === Load YOLO model and setup hook ===
+
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -31,12 +31,12 @@ model = YOLO("best_neu.pt")
 features = []
 def hook(module, input, output):
     features.append(output)
-hook_handle = model.model.model[-2].register_forward_hook(hook)  # Hook to last feature layer
+hook_handle = model.model.model[-2].register_forward_hook(hook) 
 
-# === Class names (update to your own)
+
 CLASS_NAMES = ["crazing", "inclusion","patches","pitted_surface","rolled-in_scale","scratches"]
 
-# === IoU calculator ===
+
 def compute_iou(boxA, boxB):
     xA = max(boxA[0], boxB[0])
     yA = max(boxA[1], boxB[1])
@@ -47,7 +47,7 @@ def compute_iou(boxA, boxB):
     boxBArea = max(1, (boxB[2] - boxB[0]) * (boxB[3] - boxB[1]))
     return interArea / float(boxAArea + boxBArea - interArea + 1e-6)
 
-# === Parse YOLO TXT annotation ===
+
 def parse_yolo_txt_annotation(txt_path, img_width, img_height):
     gt_boxes = []
     gt_labels = []
@@ -69,7 +69,7 @@ def parse_yolo_txt_annotation(txt_path, img_width, img_height):
             gt_labels.append(CLASS_NAMES[class_id])
     return gt_boxes, gt_labels
 
-# === GLCM feature extractor ===
+
 def extract_glcm_features(img):
     img = cv2.resize(img, (800, 800))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -146,7 +146,7 @@ def extract_glcm_features(img):
     return df.values.flatten()
 
 
-# === YOLO feature extractor ===
+
 
 def extract_yolo_features(image):
     im = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -154,7 +154,7 @@ def extract_yolo_features(image):
     im = im.astype(np.float32) / 255.0
     im = torch.from_numpy(im.transpose(2, 0, 1)).unsqueeze(0)
 
-    # ✅ Match device with model (GPU or CPU)
+    
     device = next(model.model.parameters()).device
     im = im.to(device)
 
@@ -165,7 +165,7 @@ def extract_yolo_features(image):
     feat_tensor = features[0].cpu()  # optionally move to CPU before converting to numpy
     feat_vector = torch.nn.functional.adaptive_avg_pool2d(feat_tensor, 1).view(feat_tensor.shape[0], -1)
     return feat_vector.squeeze().numpy()
-def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), text_color=(255, 255, 255)):
+def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), text_color=(255,0,0)):
     print("labels are hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
     print(list(labels))
     img = cv2.imread(img_path)
@@ -187,7 +187,7 @@ def draw_boxes_with_labels(img_path, det_boxes, labels, box_color=(0, 255, 0), t
 
     return img_copy
 
-# === Thermal conversion ===
+
 def convert_to_thermal(img_gray):
     return cv2.applyColorMap(img_gray, cv2.COLORMAP_INFERNO)
 
@@ -245,15 +245,15 @@ def process_images_folder(image,filename):
                 row = list(yolo_vec) + list(glcm_vec)
                 all_data.append(row)
 
-                # Match with closest GT box
+                
                 
 
             except Exception as e:
                 print(f"⚠️ Error in {file}: {e}")
 
-    # Build DataFrame
+    
     yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
-    # Column names for GLCM features
+    
     
     glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast', 'Energy2', 'Corr2',
        'Diss_sim2', 'Homogen2', 'Contrast2', 'Energy3', 'Corr3', 'Diss_sim3',
@@ -263,10 +263,10 @@ def process_images_folder(image,filename):
 
     
 
-    # 2. Combine feature vectors into a row
+    
     #row = list(yolo_vec) + list(glcm_vec)
 
-# 3. When all rows are ready, construct DataFrame
+
     df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
     #df = pd.DataFrame(all_data)
     print("✅ Final feature matrix shape:", df.shape)
@@ -277,14 +277,14 @@ def process_images_folder(image,filename):
     
     X_new = df.drop(columns=["target"], errors='ignore')
 
-    # Scale and reduce dimensionality
+   
     X_scaled = scaler.transform(X_new)
     X_pca = pca.transform(X_scaled)
     #print(X_pca.head())
-    # Predict using the trained SVM model
+    
     predicted_classes = svm_model.predict(X_pca)
 
-    # Add to the dataframe
+    
     df["svm_pred"] = predicted_classes
     df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
     
@@ -294,16 +294,13 @@ def process_images_folder(image,filename):
     final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
     #print(final_img)
 
-    
-
-    # Return as file
     return final_img
 
 
 
 
 
-# === Main pipeline ===
+
 @app.route('/Metal_surface_pred', methods=['POST'])
 def process_images():
     bounding_box_dict = {}
@@ -316,8 +313,8 @@ def process_images():
     filename = secure_filename(file.filename)
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     image_folder = os.path.join(UPLOAD_FOLDER,filename)
-    print("LOOOOOOOOOOOOOOOOOK HEEEEEEEEEEEEEEEEEEEEEEEEEEEREEEEEEEEE")
-    print(image_folder)
+    #print("LOOOOOOOOOOOOOOOOOK HEEEEEEEEEEEEEEEEEEEEEEEEEEEREEEEEEEEE")
+    #print(image_folder)
     file.save(image_folder)
     all_data = []
     all_targets = []
@@ -357,10 +354,8 @@ def process_images():
             row = list(yolo_vec) + list(glcm_vec)
             all_data.append(row)
 
-    # Build DataFrame
-    # Build DataFrame
     yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
-    # Column names for GLCM features
+
     glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
              'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
              'Energy3', 'Corr3', 'Diss_sim3', 'Homogen3','Contrast3', 
@@ -371,10 +366,9 @@ def process_images():
 
     
 
-    # 2. Combine feature vectors into a row
-    #row = list(yolo_vec) + list(glcm_vec)
+    
 
-# 3. When all rows are ready, construct DataFrame
+
     
     #df = pd.DataFrame(all_data)
     print("✅ Final feature matrix shape:", df.shape)
@@ -386,14 +380,14 @@ def process_images():
     
     X_new = df.drop(columns=["target"], errors='ignore')
 
-    # Scale and reduce dimensionality
+    
     X_scaled = scaler.transform(X_new)
     X_pca = pca.transform(X_scaled)
     #print(X_pca.head())
-    # Predict using the trained SVM model
+    
     predicted_classes = svm_model.predict(X_pca)
 
-    # Add to the dataframe
+    
     df["svm_pred"] = predicted_classes
     df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
     
@@ -407,54 +401,54 @@ def process_images():
     image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(image_rgb)
 
-    # Save image to in-memory buffer
+    
     buffer = BytesIO()
     pil_image.save(buffer, format="PNG")
     buffer.seek(0)
 
-    # Return as file
+    
     return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
 
 
 @app.route('/Metal_surface_pred_folder', methods=['POST'])
 def handle_zip_folder():
-    # Check if 'folder' was uploaded
+    
     if 'folder' not in request.files:
         return jsonify({'error': 'No zip file part'}), 400
 
-    zip_file = request.files['folder']  # This is the uploaded zip file
+    zip_file = request.files['folder'] 
     
-    # Wrap it in a BytesIO object
+    
     zip_bytes = io.BytesIO(zip_file.read())
 
-    # Open the ZIP archive in memory
+   
     with zipfile.ZipFile(zip_bytes, 'r') as zip_ref:
-        # List of files in zip
+        
         file_list = zip_ref.namelist()
         #print("Files in ZIP:", file_list)
         output_zip_buffer = io.BytesIO()
 
-        # Loop through files inside zip
+        
         for filename in file_list:
             if filename.endswith('.jpg') or filename.endswith('.png'):
-                # Read the image data
+                
                 with zip_ref.open(filename) as file:
                     image_data = file.read()
 
-                    # Optional: load image using PIL or OpenCV without saving
+                    
                     image = Image.open(io.BytesIO(image_data))
                     #print(f"Loaded image: {filename}, Size: {image.size}")
                     processed_image = process_images_folder(image,filename)
                     
 
-                    # Save the processed image into output zip
+                    
                     img_byte_arr = io.BytesIO()
                     processed_image.save(img_byte_arr, format='jpg')
                     img_byte_arr.seek(0)
 
                     output_zip.writestr(f"processed_{filename}", img_byte_arr.read())
 
-                    # You can now pass 'image' to your processing functions
+                    
                     # process_image(image)
     output_zip_buffer.seek(0)
 
