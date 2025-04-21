@@ -1,0 +1,16 @@
+task: detect  # Set 'detect' for object detection, 'segment' for segmentation, or 'classify' for classification
+nc: 16  # Number of classes (modify this according to your dataset)
+depth_multiple: 0.33
+width_multiple: 0.50
+
+# Backbone
+backbone:
+  - [Conv, 64, 3, 2]
+  - [C2f, 128, 3]
+  - [C2f_DWRB, 256, 3]  # Your custom module
+
+# Head
+head:
+  - [SADown, 256, 3]
+  - [LASPPF, 512, 3]
+  - [Detect, nc]
