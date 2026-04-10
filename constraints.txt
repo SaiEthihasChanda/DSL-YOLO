@@ -1,0 +1,2 @@
+# Prevent opencv-python from being installed - we only want headless
+opencv-python==0.0.0.dev0

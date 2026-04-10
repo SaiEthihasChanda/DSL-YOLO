@@ -5,7 +5,6 @@ pandas==2.2.2
 plotly==5.18.0
 torch==2.6.0
 torchvision==0.21.0
-ultralytics==8.3.141
 scikit-image==0.23.1
 scikit-learn==1.5.0
 joblib==1.3.2
@@ -13,5 +12,8 @@ pyyaml==6.0.1
 tqdm==4.66.4
 flask==2.3.3
 werkzeug==2.3.7
+ultralytics==8.3.141
+# CRITICAL: Must be last to override opencv-python from ultralytics
 opencv-python-headless==4.10.0.84
+
 

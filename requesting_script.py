@@ -22,11 +22,20 @@ from PIL import Image
 
 # LAZY LOAD YOLO - only import when needed to avoid OpenGL errors
 _yolo_model = None
+_yolo_import_error = None
+
 def get_yolo_model(model_path="best_neu.pt"):
-    global _yolo_model
+    global _yolo_model, _yolo_import_error
+    if _yolo_import_error:
+        raise ImportError(_yolo_import_error)
     if _yolo_model is None:
-        from ultralytics import YOLO
-        _yolo_model = YOLO(model_path)
+        try:
+            from ultralytics import YOLO
+            _yolo_model = YOLO(model_path)
+        except ImportError as e:
+            error_msg = f"Failed to load YOLO model: {str(e)}"
+            _yolo_import_error = error_msg
+            raise ImportError(error_msg)
     return _yolo_model
 
 # Suppress warnings
@@ -212,33 +221,48 @@ elif tab == "Single Image Detection":
                 result = None
                 if selected_model == "Model 1: YOLOv8n":
                     try:
-                        model = get_yolo_model("best_neu.pt")
-                        import cv2
-                        import numpy as np
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-                            img = Image.open(uploaded_image)
-                            img.save(tmp_file.name)
-                            tmp_file_path = tmp_file.name
                         try:
-                            results = model(tmp_file_path)
-                            # Convert YOLO output to bytes without creating temp file
-                            output_img = results[0].plot()
-                            output_pil = Image.fromarray(output_img[..., ::-1])
-                            # Save to bytes buffer instead of file
-                            buffer = io.BytesIO()
-                            output_pil.save(buffer, format="JPEG")
-                            buffer.seek(0)
-                            processed_image = Image.open(io.BytesIO(buffer.getvalue()))
+                            model = get_yolo_model("best_neu.pt")
+                        except ImportError as import_err:
                             with col1:
-                                st.success("YOLOv8n processing successful!")
+                                st.error(f"❌ YOLOv8n unavailable: {str(import_err)}\n\nTry Model 2 (DSL-YOLO) or Model 3 instead.")
                             result = {
                                 'name': uploaded_image.name,
-                                'status': 'success',
-                                'message': "YOLOv8n processing successful!",
-                                'image': processed_image,
+                                'status': 'error',
+                                'message': f"YOLOv8n import failed",
+                                'image': None,
                                 'detections': [],
                                 'processing_time': time.time() - start_time
                             }
+                            st.session_state.results.append(result)
+                        
+                        if result is None:  # Proceed only if import succeeded
+                            import cv2
+                            import numpy as np
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                                img = Image.open(uploaded_image)
+                                img.save(tmp_file.name)
+                                tmp_file_path = tmp_file.name
+                            try:
+                                results = model(tmp_file_path)
+                                # Convert YOLO output to bytes without creating temp file
+                                output_img = results[0].plot()
+                                output_pil = Image.fromarray(output_img[..., ::-1])
+                                # Save to bytes buffer instead of file
+                                buffer = io.BytesIO()
+                                output_pil.save(buffer, format="JPEG")
+                                buffer.seek(0)
+                                processed_image = Image.open(io.BytesIO(buffer.getvalue()))
+                                with col1:
+                                    st.success("YOLOv8n processing successful!")
+                                result = {
+                                    'name': uploaded_image.name,
+                                    'status': 'success',
+                                    'message': "YOLOv8n processing successful!",
+                                    'image': processed_image,
+                                    'detections': [],
+                                    'processing_time': time.time() - start_time
+                                }
                         finally:
                             try:
                                 safe_unlink(tmp_file_path)
@@ -402,34 +426,66 @@ elif tab == "Multiple Image Detection":
                     result = None
                     if selected_model == "Model 1: YOLOv8n":
                         try:
-                            model = get_yolo_model("best_neu.pt")
-                            import cv2
-                            import numpy as np
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-                                img = Image.open(uploaded_image)
-                                img.save(tmp_file.name)
-                                tmp_file_path = tmp_file.name
                             try:
-                                results = model(tmp_file_path)
-                                # Convert YOLO output to bytes without creating temp file
-                                output_img = results[0].plot()
-                                output_pil = Image.fromarray(output_img[..., ::-1])
-                                # Save to bytes buffer instead of file
-                                buffer = io.BytesIO()
-                                output_pil.save(buffer, format="JPEG")
-                                buffer.seek(0)
-                                processed_image = Image.open(io.BytesIO(buffer.getvalue()))
+                                model = get_yolo_model("best_neu.pt")
+                            except ImportError as import_err:
                                 with col1:
-                                    st.success("YOLOv8n processing successful!")
-                                
-                            finally:
+                                    st.error(f"❌ YOLOv8n unavailable: {str(import_err)}\n\nTry Model 2 (DSL-YOLO) or Model 3 instead.")
+                                result = {
+                                    'name': uploaded_image.name,
+                                    'status': 'error',
+                                    'message': f"YOLOv8n import failed: {str(import_err)}",
+                                    'image': None,
+                                    'detections': [],
+                                    'processing_time': time.time() - start_time
+                                }
+                                model = None
+                            
+                            if model is not None:
+                                import cv2
+                                import numpy as np
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                                    img = Image.open(uploaded_image)
+                                    img.save(tmp_file.name)
+                                    tmp_file_path = tmp_file.name
                                 try:
-                                    safe_unlink(tmp_file_path)
-                                except Exception as e:
-                                    pass  # Silently ignore
+                                    results = model(tmp_file_path)
+                                    # Convert YOLO output to bytes without creating temp file
+                                    output_img = results[0].plot()
+                                    output_pil = Image.fromarray(output_img[..., ::-1])
+                                    # Save to bytes buffer instead of file
+                                    buffer = io.BytesIO()
+                                    output_pil.save(buffer, format="JPEG")
+                                    buffer.seek(0)
+                                    processed_image = Image.open(io.BytesIO(buffer.getvalue()))
+                                    with col1:
+                                        st.success("YOLOv8n processing successful!")
+                                    result = {
+                                        'name': uploaded_image.name,
+                                        'status': 'success',
+                                        'message': "YOLOv8n processing successful!",
+                                        'image': processed_image,
+                                        'detections': [],
+                                        'processing_time': time.time() - start_time
+                                    }
+                                    
+                                finally:
+                                    try:
+                                        safe_unlink(tmp_file_path)
+                                    except Exception as e:
+                                        pass  # Silently ignore
                         except Exception as e:
-                            with col1:
-                                st.error(f"Local YOLOv8n processing failed: {str(e)}")
+                            if result is None or result.get('status') != 'error':
+                                with col1:
+                                    st.error(f"Local YOLOv8n processing failed: {str(e)}")
+                                result = {
+                                    'name': uploaded_image.name,
+                                    'status': 'error',
+                                    'message': f"Local YOLOv8n processing failed: {str(e)}",
+                                    'image': None,
+                                    'detections': [],
+                                    'processing_time': time.time() - start_time
+                                }
                         
                         
                     elif selected_model == "Model 2: DSL-YOLO":
