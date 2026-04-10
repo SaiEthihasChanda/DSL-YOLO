@@ -1,37 +1,59 @@
 from flask import Flask, request, jsonify
 import os
-import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
-import numpy as np 
-from flask import send_file
 from io import BytesIO
 from PIL import Image
 import glob
-import cv2
-import os
 import zipfile
 import io
-
 import pandas as pd
-from skimage.filters import sobel
 from skimage.feature import graycomatrix, graycoprops
 from skimage.measure import shannon_entropy
 from tqdm import tqdm
-from ultralytics import YOLO
 import torch
 import joblib
+
+# Set environment variables for headless mode
+os.environ['HEADLESS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ['DISPLAY'] = ''
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-model = YOLO("best_neu.pt")
+# Lazy-load heavy dependencies
+_model = None
+_cv2 = None
+
+def get_cv2():
+    global _cv2
+    if _cv2 is None:
+        import cv2
+        _cv2 = cv2
+    return _cv2
+
+def get_model():
+    global _model
+    if _model is None:
+        from ultralytics import YOLO
+        _model = YOLO("best_neu.pt")
+    return _model
+
+# Initialize hook on first model use
+_hook_handle = None
+def setup_model_hook():
+    global _hook_handle
+    model = get_model()
+    if _hook_handle is None:
+        _hook_handle = model.model.model[-2].register_forward_hook(hook)
+
 features = []
 def hook(module, input, output):
     features.append(output)
-hook_handle = model.model.model[-2].register_forward_hook(hook) 
 
 
 CLASS_NAMES = ["crazing", "inclusion","patches","pitted_surface","rolled-in_scale","scratches"]
@@ -71,6 +93,7 @@ def parse_yolo_txt_annotation(txt_path, img_width, img_height):
 
 
 def extract_glcm_features(img):
+    cv2 = get_cv2()
     img = cv2.resize(img, (800, 800))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
@@ -149,6 +172,10 @@ def extract_glcm_features(img):
 
 
 def extract_yolo_features(image):
+    cv2 = get_cv2()
+    model = get_model()
+    setup_model_hook()
+    
     im = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     im = cv2.resize(im, (640, 640))
     im = im.astype(np.float32) / 255.0
@@ -303,6 +330,10 @@ def process_images_folder(image,filename):
 
 @app.route('/Metal_surface_pred', methods=['POST'])
 def process_images():
+    cv2 = get_cv2()
+    model = get_model()
+    setup_model_hook()
+    
     bounding_box_dict = {}
     image_folder = "uploads"
     os.makedirs(image_folder, exist_ok=True)
