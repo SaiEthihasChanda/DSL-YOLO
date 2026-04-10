@@ -32,15 +32,21 @@ _cv2 = None
 def get_cv2():
     global _cv2
     if _cv2 is None:
-        import cv2
-        _cv2 = cv2
+        try:
+            import cv2
+            _cv2 = cv2
+        except ImportError as e:
+            raise ImportError(f"Failed to import cv2: {str(e)}. This is a known issue on Streamlit Cloud due to missing system libraries (libGL.so.1). Make sure opencv-python-headless is installed.")
     return _cv2
 
 def get_model():
     global _model
     if _model is None:
-        from ultralytics import YOLO
-        _model = YOLO("best_neu.pt")
+        try:
+            from ultralytics import YOLO
+            _model = YOLO("best_neu.pt")
+        except ImportError as e:
+            raise ImportError(f"Failed to load YOLO model: {str(e)}")
     return _model
 
 # Initialize hook on first model use
@@ -330,115 +336,103 @@ def process_images_folder(image,filename):
 
 @app.route('/Metal_surface_pred', methods=['POST'])
 def process_images():
-    cv2 = get_cv2()
-    model = get_model()
-    setup_model_hook()
-    
-    bounding_box_dict = {}
-    image_folder = "uploads"
-    os.makedirs(image_folder, exist_ok=True)
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image uploaded'}), 400
+    try:
+        # Check for cv2 import first
+        try:
+            cv2 = get_cv2()
+            model = get_model()
+            setup_model_hook()
+        except ImportError as import_err:
+            error_msg = f"OpenCV import failed on this environment: {str(import_err)}"
+            return jsonify({'error': error_msg}), 503  # Service Unavailable
+        
+        bounding_box_dict = {}
+        image_folder = "uploads"
+        os.makedirs(image_folder, exist_ok=True)
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image uploaded'}), 400
 
-    file = request.files['image']
-    filename = secure_filename(file.filename)
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    image_folder = os.path.join(UPLOAD_FOLDER,filename)
-    #print("LOOOOOOOOOOOOOOOOOK HEEEEEEEEEEEEEEEEEEEEEEEEEEEREEEEEEEEE")
-    #print(image_folder)
-    file.save(image_folder)
-    all_data = []
-    all_targets = []
+        file = request.files['image']
+        filename = secure_filename(file.filename)
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        image_folder = os.path.join(UPLOAD_FOLDER,filename)
+        file.save(image_folder)
+        all_data = []
+        all_targets = []
 
-    for file in tqdm(os.listdir("uploads"), desc="Processing"):
-        if not file.lower().endswith((".jpg", ".jpeg", ".png")):
-            continue
-
-        filename = os.path.splitext(file)[0]
-        img_path = os.path.join(image_folder)
-        #annot_path = os.path.join(annotation_folder, filename + ".txt")
-
-        original = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        if original is None:
-            continue
-
-        h, w = original.shape
-        thermal = convert_to_thermal(original)
-        original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR)
-
-        #gt_boxes, gt_labels = parse_yolo_txt_annotation(annot_path, w, h)
-
-        results = model(original_color, conf=0.05, iou=0.0, agnostic_nms=True)
-        print("________________________________________________________________________")
-        #print(results)
-        det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
-
-        for x1, y1, x2, y2 in det_boxes:
-            norm_crop = original_color[y1:y2, x1:x2]
-            thermal_crop = thermal[y1:y2, x1:x2]
-            
-            if norm_crop.size == 0 or thermal_crop.size == 0:
+        for file in tqdm(os.listdir("uploads"), desc="Processing"):
+            if not file.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
 
-            yolo_vec = extract_yolo_features(norm_crop)
-            glcm_vec = extract_glcm_features(thermal_crop)
-            row = list(yolo_vec) + list(glcm_vec)
-            all_data.append(row)
+            filename = os.path.splitext(file)[0]
+            img_path = os.path.join(image_folder)
 
-    yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
+            original = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            if original is None:
+                continue
 
-    glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
-             'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
-             'Energy3', 'Corr3', 'Diss_sim3', 'Homogen3','Contrast3', 
-                'Energy4', 'Corr4', 'Diss_sim4', 'Homogen4', 'Contrast4',
-                'Energy5', 'Corr5', 'Diss_sim5', 'Homogen5', 'Contrast5']
-    df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
-    df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
+            h, w = original.shape
+            thermal = convert_to_thermal(original)
+            original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR)
 
-    
+            results = model(original_color, conf=0.05, iou=0.0, agnostic_nms=True)
+            print("________________________________________________________________________")
+            det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
 
-    
+            for x1, y1, x2, y2 in det_boxes:
+                norm_crop = original_color[y1:y2, x1:x2]
+                thermal_crop = thermal[y1:y2, x1:x2]
+                
+                if norm_crop.size == 0 or thermal_crop.size == 0:
+                    continue
 
+                yolo_vec = extract_yolo_features(norm_crop)
+                glcm_vec = extract_glcm_features(thermal_crop)
+                row = list(yolo_vec) + list(glcm_vec)
+                all_data.append(row)
 
-    
-    #df = pd.DataFrame(all_data)
-    print("✅ Final feature matrix shape:", df.shape)
-    print(df)
-    scaler = joblib.load("scaler.pkl")
-    pca = joblib.load("pca.pkl")
-    svm_model = joblib.load("svm_model.pkl")
-    le = joblib.load("label_encoder.pkl")
-    
-    X_new = df.drop(columns=["target"], errors='ignore')
+        yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
 
-    
-    X_scaled = scaler.transform(X_new)
-    X_pca = pca.transform(X_scaled)
-    #print(X_pca.head())
-    
-    predicted_classes = svm_model.predict(X_pca)
+        glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
+                 'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
+                 'Energy3', 'Corr3', 'Diss_sim3', 'Homogen3','Contrast3', 
+                    'Energy4', 'Corr4', 'Diss_sim4', 'Homogen4', 'Contrast4',
+                    'Energy5', 'Corr5', 'Diss_sim5', 'Homogen5', 'Contrast5']
+        df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
+        df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
 
-    
-    df["svm_pred"] = predicted_classes
-    df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
-    
-    for i,(x1, y1, x2, y2) in enumerate(det_boxes):
+        print("✅ Final feature matrix shape:", df.shape)
+        print(df)
+        scaler = joblib.load("scaler.pkl")
+        pca = joblib.load("pca.pkl")
+        svm_model = joblib.load("svm_model.pkl")
+        le = joblib.load("label_encoder.pkl")
         
-        bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=df["svm_pred_label"].iloc[i]
-    final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
-    #print(final_img)
+        X_new = df.drop(columns=["target"], errors='ignore')
+        X_scaled = scaler.transform(X_new)
+        X_pca = pca.transform(X_scaled)
+        
+        predicted_classes = svm_model.predict(X_pca)
 
-    print("✅ Predictions added to dataframe!")
-    image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
-    pil_image = Image.fromarray(image_rgb)
+        df["svm_pred"] = predicted_classes
+        df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
+        
+        for i,(x1, y1, x2, y2) in enumerate(det_boxes):
+            bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=df["svm_pred_label"].iloc[i]
+        final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
 
+        print("✅ Predictions added to dataframe!")
+        image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+
+        buffer = BytesIO()
+        pil_image.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
     
-    buffer = BytesIO()
-    pil_image.save(buffer, format="PNG")
-    buffer.seek(0)
-
-    
-    return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
+    except Exception as e:
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 
 @app.route('/Metal_surface_pred_folder', methods=['POST'])
@@ -497,10 +491,6 @@ def handle_zip_folder():
 @app.route('/normal', methods=['POST'])
 def dsl_normal():
     """Simple YOLO prediction without SVM (Model 2: DSL-YOLO)"""
-    cv2 = get_cv2()
-    model = get_model()
-    setup_model_hook()
-    
     try:
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -508,6 +498,14 @@ def dsl_normal():
         file = request.files['image']
         if file.filename == '':
             return jsonify({'error': 'No selected file'}), 400
+        
+        try:
+            cv2 = get_cv2()
+            model = get_model()
+            setup_model_hook()
+        except ImportError as import_err:
+            error_msg = f"OpenCV import failed on this environment: {str(import_err)}"
+            return jsonify({'error': error_msg}), 503  # Service Unavailable
         
         # Read image
         img = Image.open(file.stream)

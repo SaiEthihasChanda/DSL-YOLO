@@ -300,13 +300,25 @@ elif tab == "Single Image Detection":
                                 'processing_time': time.time() - start_time
                             }
                         else:
+                            # Try to get error message from JSON response
+                            error_msg = f"Request failed with status code {response.status_code}"
+                            try:
+                                error_data = response.json()
+                                if 'error' in error_data:
+                                    error_msg = error_data['error']
+                            except:
+                                pass
+                            
                             with col1:
-                                st.error(f"Request failed with status code {response.status_code}")
+                                if response.status_code == 503:
+                                    st.error(f"❌ Model 2 (DSL-YOLO) unavailable: {error_msg}\n\nThis model requires OpenCV which cannot run on this environment. Try Model 3 instead.")
+                                else:
+                                    st.error(f"❌ Model 2 (DSL-YOLO) failed: {error_msg}")
                             processed_image = None
                             result = {
                                 'name': uploaded_image.name,
                                 'status': 'error',
-                                'message': f"Request failed with status code {response.status_code}",
+                                'message': error_msg,
                                 'image': None,
                                 'detections': [],
                                 'processing_time': time.time() - start_time
@@ -357,13 +369,25 @@ elif tab == "Single Image Detection":
                                     'processing_time': time.time() - start_time
                                 }
                         else:
+                            # Try to get error message from JSON response
+                            error_msg = f"Request failed with status code {response.status_code}"
+                            try:
+                                error_data = response.json()
+                                if 'error' in error_data:
+                                    error_msg = error_data['error']
+                            except:
+                                pass
+                            
                             with col1:
-                                st.error(f"Request failed with status code {response.status_code}")
+                                if response.status_code == 503:
+                                    st.error(f"❌ Model 3 (Custom YOLOv8) unavailable: {error_msg}\n\nThis model requires OpenCV which cannot run on this environment. Try Model 2 instead.")
+                                else:
+                                    st.error(f"❌ Model 3 (Custom YOLOv8) failed: {error_msg}")
                             processed_image = None
                             result = {
                                 'name': uploaded_image.name,
                                 'status': 'error',
-                                'message': f"Request failed with status code {response.status_code}",
+                                'message': error_msg,
                                 'image': None,
                                 'detections': [],
                                 'processing_time': time.time() - start_time
@@ -508,13 +532,25 @@ elif tab == "Multiple Image Detection":
                                     'processing_time': time.time() - start_time
                                 }
                             else:
+                                # Try to get error message from JSON response
+                                error_msg = f"Request failed with status code {response.status_code}"
+                                try:
+                                    error_data = response.json()
+                                    if 'error' in error_data:
+                                        error_msg = error_data['error']
+                                except:
+                                    pass
+                                
                                 with col1:
-                                    st.error(f"Request failed for {uploaded_image.name} with status code {response.status_code}")
+                                    if response.status_code == 503:
+                                        st.error(f"❌ Model 2 (DSL-YOLO) unavailable for {uploaded_image.name}: {error_msg}")
+                                    else:
+                                        st.error(f"❌ Model 2 (DSL-YOLO) failed for {uploaded_image.name}: {error_msg}")
                                 processed_image = None
                                 result = {
                                     'name': uploaded_image.name,
                                     'status': 'error',
-                                    'message': f"Request failed for {uploaded_image.name} with status code {response.status_code}",
+                                    'message': error_msg,
                                     'image': None,
                                     'detections': [],
                                     'processing_time': time.time() - start_time
@@ -536,9 +572,8 @@ elif tab == "Multiple Image Detection":
                             # API call for Custom YOLOv8
                             files = {'image': (uploaded_image.name, uploaded_image, uploaded_image.type)}
                             response = requests.post(url, files=files)
-                            #response_data = response.json()
+                            
                             if response.status_code == 200:
-                                
                                 with col1:
                                     st.success(f"Custom Metal Detector YOLO successful for {uploaded_image.name}!")
                                 processed_image = Image.open(io.BytesIO(response.content))
@@ -551,7 +586,30 @@ elif tab == "Multiple Image Detection":
                                     'detections':[],
                                     'processing_time': time.time() - start_time
                                 }
-                            
+                            else:
+                                # Try to get error message from JSON response
+                                error_msg = f"Request failed with status code {response.status_code}"
+                                try:
+                                    error_data = response.json()
+                                    if 'error' in error_data:
+                                        error_msg = error_data['error']
+                                except:
+                                    pass
+                                
+                                with col1:
+                                    if response.status_code == 503:
+                                        st.error(f"❌ Model 3 (Custom YOLOv8) unavailable for {uploaded_image.name}: {error_msg}")
+                                    else:
+                                        st.error(f"❌ Model 3 (Custom YOLOv8) failed for {uploaded_image.name}: {error_msg}")
+                                processed_image = None
+                                result = {
+                                    'name': uploaded_image.name,
+                                    'status': 'error',
+                                    'message': error_msg,
+                                    'image': None,
+                                    'detections': None,
+                                    'processing_time': time.time() - start_time
+                                }
 
                         except Exception as e:
                             with col1:
