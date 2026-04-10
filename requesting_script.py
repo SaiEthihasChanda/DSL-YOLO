@@ -70,8 +70,10 @@ st.markdown(
 def start_flask_server():
     """Start Flask server in a background thread"""
     try:
-        # Import Flask app from flask_script
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Metal_surface'))
+        # Import Flask app from flask_script (same directory)
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        if app_dir not in sys.path:
+            sys.path.insert(0, app_dir)
         from flask_script import app as flask_app
         
         # Run Flask app with threading disabled to avoid conflicts

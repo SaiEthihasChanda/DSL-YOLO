@@ -7,6 +7,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+ultralytics/
 downloads/
 eggs/
 .eggs/
@@ -38,6 +39,7 @@ venv.bak/
 *.swo
 *~
 .DS_Store
+.streamlit/
 
 
 *.xml
@@ -48,10 +50,13 @@ venv.bak/
 *.xlsx
 *.xls
 *.json
+*.zip
 data/
 Data/
 NEU-DET/
 NEUDETCopy/
+runs/
+uploads/
 
 
 
