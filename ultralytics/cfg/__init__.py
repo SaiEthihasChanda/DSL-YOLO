@@ -7,23 +7,25 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Union
 
+# Set environment variables for headless environments EARLY
+import os
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+os.environ.setdefault('DISPLAY', '')
+os.environ.setdefault('HEADLESS', '1')
+
 # Import cv2 with comprehensive fallback for headless environments
-import sys
+# This is wrapped to prevent import-time failures on headless systems
+cv2 = None  # Default to None if import fails
 try:
     import cv2
 except ImportError as e:
-    # Fallback 1: Try with offscreen mode
-    if "libGL" in str(e) or "cannot open shared object" in str(e):
-        import os
-        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-        os.environ['DISPLAY'] = ''
-        try:
-            import cv2
-        except Exception as fallback_error:
-            # Fallback 2: Try opencv-python-headless if still failing
-            raise ImportError(f"Failed to import cv2: {e}\n{fallback_error}\nMake sure opencv-python-headless is installed.")
-    else:
-        raise
+    # cv2 import failed - store error for later handling
+    cv2_import_error = str(e)
+    cv2 = None  # Leave cv2 as None; it will fail when actually used, not at import time
+    # Don't re-raise here - let the code continue, failures will be caught when cv2 is actually used
+    
+# If cv2 import succeeded, we're good. If not, cv2 is None and will raise AttributeError when accessed
+# This allows you to check `if cv2 is None` or catch the error at usage time
 
 from ultralytics.utils import (
     ASSETS,

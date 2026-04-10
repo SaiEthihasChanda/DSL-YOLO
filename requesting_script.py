@@ -31,8 +31,18 @@ def get_yolo_model(model_path="best_neu.pt"):
     if _yolo_model is None:
         try:
             from ultralytics import YOLO
+            # Try to instantiate YOLO - this is where cv2 errors will surface
             _yolo_model = YOLO(model_path)
-        except ImportError as e:
+        except (ImportError, AttributeError, OSError) as e:
+            error_str = str(e)
+            # Check if this is a cv2/libGL error
+            if 'libGL' in error_str or 'cv2' in error_str or 'cannot open shared object' in error_str:
+                error_msg = f"OpenCV (GUI/graphics library) failed to load on this environment: {error_str}\n\nThis is a cloud environment limitation. Image-based models cannot run here.\nTry using Streamlit locally or other model types."
+            else:
+                error_msg = f"Failed to load YOLO model: {error_str}"
+            _yolo_import_error = error_msg
+            raise ImportError(error_msg)
+        except Exception as e:
             error_msg = f"Failed to load YOLO model: {str(e)}"
             _yolo_import_error = error_msg
             raise ImportError(error_msg)
