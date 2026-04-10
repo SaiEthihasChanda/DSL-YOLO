@@ -114,17 +114,19 @@ with st.sidebar:
 if tab == "Welcome":
     col1, col2, col3 = st.columns([1, 2, 1])  # Middle column is wider
     with col2:
-        try:
-            st.image(
-                r"C:\Users\saiet\OneDrive\Desktop\stream\logo.jpg",
-                width=300,
-                caption=None,
-                use_container_width=True,
-                clamp=True,
-                output_format="auto"
-            )
-        except FileNotFoundError:
-            st.warning("Logo image not found at 'C:\\Users\\saiet\\OneDrive\\Desktop\\stream\\logo.jpg'.")
+        logo_path = r"C:\Users\saiet\OneDrive\Desktop\stream\logo.jpg"
+        if os.path.exists(logo_path):
+            try:
+                st.image(
+                    logo_path,
+                    width=300,
+                    caption=None,
+                    use_container_width=True,
+                    clamp=True,
+                    output_format="auto"
+                )
+            except Exception as e:
+                pass  # Silently skip logo if any error occurs
     
     st.markdown('<h1 class="centered-title">Metal Surface Defect Detection using Fine Tuned DSL-YOLO and ML Techniques</h1>', unsafe_allow_html=True)
     st.markdown("""
