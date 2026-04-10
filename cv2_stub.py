@@ -185,6 +185,52 @@ def matchTemplate(image, templ, method):
             return np.zeros((h - th + 1, w - tw + 1), dtype=np.float32)
     return np.array([], dtype=np.float32).reshape(0, 0)
 
+# Display and window functions (stubs - don't actually display anything)
+def namedWindow(winname, flags=1):
+    """Create window (stub - no-op)"""
+    pass
+
+def imshow(winname, mat):
+    """Display image (stub - no-op in headless)"""
+    pass
+
+def destroyWindow(winname):
+    """Destroy window (stub - no-op)"""
+    pass
+
+def destroyAllWindows():
+    """Destroy all windows (stub - no-op)"""
+    pass
+
+def waitKey(delay=0):
+    """Wait for key press (stub - returns -1 immediately)"""
+    return -1
+
+def setWindowProperty(winname, propId, propValue):
+    """Set window property (stub - no-op)"""
+    pass
+
+def getWindowProperty(winname, propId):
+    """Get window property (stub - returns 0)"""
+    return 0
+
+def imwrite(filename, img):
+    """Write image file using PIL"""
+    try:
+        if isinstance(img, np.ndarray):
+            # Assume BGR format (OpenCV standard)
+            if len(img.shape) == 3 and img.shape[2] == 3:
+                img = img[..., ::-1]  # Convert BGR to RGB
+                img_pil = Image.fromarray(img, 'RGB')
+            else:
+                img_pil = Image.fromarray(img)
+        else:
+            img_pil = Image.fromarray(img)
+        img_pil.save(filename)
+        return True
+    except Exception as e:
+        return False
+
 # OpenCV configuration functions (stubs)
 def setNumThreads(nthreads):
     """Stub: Set number of threads for OpenCV operations"""
