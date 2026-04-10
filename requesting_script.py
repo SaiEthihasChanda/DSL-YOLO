@@ -63,8 +63,8 @@ st.markdown(
 )
 
 # API endpoints - use environment variable FLASK_URL for public deployment
-# Default to localhost for local development
-FLASK_BASE_URL = os.getenv('FLASK_URL', 'http://127.0.0.1:5000')
+# Default to public ngrok URL
+FLASK_BASE_URL = os.getenv('FLASK_URL', 'https://cable-canning-budding.ngrok-free.dev')
 url = f'{FLASK_BASE_URL}/Metal_surface_pred'
 test_url = f'{FLASK_BASE_URL}/'
 normal_url = f'{FLASK_BASE_URL}/normal'
