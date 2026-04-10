@@ -5,42 +5,14 @@ import sys
 import zipfile
 import os
 import warnings
+from PIL import Image
+from ultralytics import YOLO
 import tempfile
 import time
 import base64
 import pandas as pd
 import plotly.express as px
-import threading
-
-# Set environment variables for headless mode BEFORE any cv2 imports
-os.environ['HEADLESS'] = '1'
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-os.environ['DISPLAY'] = ''
-
-# IMPORTANT: Inject cv2_stub before importing ultralytics
-# This prevents cv2 import errors on headless systems like Streamlit Cloud
-try:
-    import cv2  # Try real cv2 first
-except ImportError:
-    # Real cv2 not available - use our PIL-based stub
-    import cv2_stub as cv2
-    sys.modules['cv2'] = cv2  # Register stub in sys.modules so ultralytics finds it
-
-from PIL import Image
-
-# LAZY LOAD YOLO - only import when needed to avoid OpenGL errors
-_yolo_model = None
-_yolo_import_error = None
-
-def get_yolo_model(model_path="best_neu.pt"):
-    global _yolo_model, _yolo_import_error
-    if _yolo_import_error:
-        raise ImportError(_yolo_import_error)
-    if _yolo_model is None:
-        from ultralytics import YOLO
-        _yolo_model = YOLO(model_path)
-    return _yolo_model
+#import retryingdfrgr
 
 # Suppress warnings
 # warnings.filterwarnings("ignore")
@@ -88,32 +60,7 @@ st.markdown(
     </style>
     """,
     unsafe_allow_html=True
-)   
-
-    
-# ============================================
-# START FLASK BACKEND IN BACKGROUND THREAD
-# ============================================
-def start_flask_server():
-    """Start Flask server in a background thread"""
-    try:
-        # Import Flask app from flask_script (same directory)
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        if app_dir not in sys.path:
-            sys.path.insert(0, app_dir)
-        from flask_script import app as flask_app
-        
-        # Run Flask app with threading disabled to avoid conflicts
-        flask_app.run(debug=False, threaded=True, use_reloader=False, port=5000, host='127.0.0.1')
-    except Exception as e:
-        print(f"Error starting Flask server: {e}")
-
-# Start Flask in a background thread only once
-if 'flask_started' not in st.session_state:
-    flask_thread = threading.Thread(target=start_flask_server, daemon=True)
-    flask_thread.start()
-    st.session_state.flask_started = True
-    time.sleep(2)  # Give Flask time to start
+)
 
 # API endpoints
 url = 'http://127.0.0.1:5000/Metal_surface_pred'
@@ -167,24 +114,17 @@ with st.sidebar:
 if tab == "Welcome":
     col1, col2, col3 = st.columns([1, 2, 1])  # Middle column is wider
     with col2:
-        # Try to load logo from multiple possible locations
-        logo_paths = [
-            "logo.jpg",
-            "./logo.jpg",
-            r"C:\Users\saiet\OneDrive\Desktop\stream\logo.jpg",
-        ]
-        logo_found = False
-        for logo_path in logo_paths:
-            try:
-                if os.path.exists(logo_path):
-                    st.image(logo_path, width=300, caption=None, clamp=True, output_format="auto")
-                    logo_found = True
-                    break
-            except Exception:
-                continue
-        
-        if not logo_found:
-            st.info("📷 Metal Surface Defect Detection System")
+        try:
+            st.image(
+                r"C:\Users\saiet\OneDrive\Desktop\stream\logo.jpg",
+                width=300,
+                caption=None,
+                use_container_width=True,
+                clamp=True,
+                output_format="auto"
+            )
+        except FileNotFoundError:
+            st.warning("Logo image not found at 'C:\\Users\\saiet\\OneDrive\\Desktop\\stream\\logo.jpg'.")
     
     st.markdown('<h1 class="centered-title">Metal Surface Defect Detection using Fine Tuned DSL-YOLO and ML Techniques</h1>', unsafe_allow_html=True)
     st.markdown("""
@@ -223,57 +163,40 @@ elif tab == "Single Image Detection":
             with st.spinner("Analyzing..."):
                 start_time = time.time()
                 result = None
-                processed_image = None
                 if selected_model == "Model 1: YOLOv8n":
                     try:
+                        model = YOLO("best_neu.pt")
+                        import cv2
+                        import numpy as np
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                            img = Image.open(uploaded_image)
+                            img.save(tmp_file.name)
+                            tmp_file_path = tmp_file.name
                         try:
-                            model = get_yolo_model("best_neu.pt")
-                        except ImportError as import_err:
+                            results = model(tmp_file_path)
+                            # Convert YOLO output to bytes without creating temp file
+                            output_img = results[0].plot()
+                            output_pil = Image.fromarray(output_img[..., ::-1])
+                            # Save to bytes buffer instead of file
+                            buffer = io.BytesIO()
+                            output_pil.save(buffer, format="JPEG")
+                            buffer.seek(0)
+                            processed_image = Image.open(io.BytesIO(buffer.getvalue()))
                             with col1:
-                                st.error(f"❌ YOLOv8n unavailable: {str(import_err)}\n\nTry Model 2 (DSL-YOLO) or Model 3 instead.")
+                                st.success("YOLOv8n processing successful!")
                             result = {
                                 'name': uploaded_image.name,
-                                'status': 'error',
-                                'message': f"YOLOv8n import failed",
-                                'image': None,
+                                'status': 'success',
+                                'message': "YOLOv8n processing successful!",
+                                'image': processed_image,
                                 'detections': [],
                                 'processing_time': time.time() - start_time
                             }
-                            st.session_state.results.append(result)
-                            model = None
-                        
-                        if model is not None:
-                            import cv2
-                            import numpy as np
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-                                img = Image.open(uploaded_image)
-                                img.save(tmp_file.name)
-                                tmp_file_path = tmp_file.name
+                        finally:
                             try:
-                                results = model(tmp_file_path)
-                                # Convert YOLO output to bytes without creating temp file
-                                output_img = results[0].plot()
-                                output_pil = Image.fromarray(output_img[..., ::-1])
-                                # Save to bytes buffer instead of file
-                                buffer = io.BytesIO()
-                                output_pil.save(buffer, format="JPEG")
-                                buffer.seek(0)
-                                processed_image = Image.open(io.BytesIO(buffer.getvalue()))
-                                with col1:
-                                    st.success("YOLOv8n processing successful!")
-                                result = {
-                                    'name': uploaded_image.name,
-                                    'status': 'success',
-                                    'message': "YOLOv8n processing successful!",
-                                    'image': processed_image,
-                                    'detections': [],
-                                    'processing_time': time.time() - start_time
-                                }
-                            finally:
-                                try:
-                                    safe_unlink(tmp_file_path)
-                                except Exception as e:
-                                    pass  # Silently ignore
+                                safe_unlink(tmp_file_path)
+                            except Exception as e:
+                                pass  # Silently ignore
                     except Exception as e:
                         with col1:
                             st.error(f"Local YOLOv8n processing failed: {str(e)}")
@@ -305,25 +228,13 @@ elif tab == "Single Image Detection":
                                 'processing_time': time.time() - start_time
                             }
                         else:
-                            # Try to get error message from JSON response
-                            error_msg = f"Request failed with status code {response.status_code}"
-                            try:
-                                error_data = response.json()
-                                if 'error' in error_data:
-                                    error_msg = error_data['error']
-                            except:
-                                pass
-                            
                             with col1:
-                                if response.status_code == 503:
-                                    st.error(f"❌ Model 2 (DSL-YOLO) unavailable: {error_msg}\n\nThis model requires OpenCV which cannot run on this environment. Try Model 3 instead.")
-                                else:
-                                    st.error(f"❌ Model 2 (DSL-YOLO) failed: {error_msg}")
+                                st.error(f"Request failed with status code {response.status_code}")
                             processed_image = None
                             result = {
                                 'name': uploaded_image.name,
                                 'status': 'error',
-                                'message': error_msg,
+                                'message': f"Request failed with status code {response.status_code}",
                                 'image': None,
                                 'detections': [],
                                 'processing_time': time.time() - start_time
@@ -374,25 +285,13 @@ elif tab == "Single Image Detection":
                                     'processing_time': time.time() - start_time
                                 }
                         else:
-                            # Try to get error message from JSON response
-                            error_msg = f"Request failed with status code {response.status_code}"
-                            try:
-                                error_data = response.json()
-                                if 'error' in error_data:
-                                    error_msg = error_data['error']
-                            except:
-                                pass
-                            
                             with col1:
-                                if response.status_code == 503:
-                                    st.error(f"❌ Model 3 (Custom YOLOv8) unavailable: {error_msg}\n\nThis model requires OpenCV which cannot run on this environment. Try Model 2 instead.")
-                                else:
-                                    st.error(f"❌ Model 3 (Custom YOLOv8) failed: {error_msg}")
+                                st.error(f"Request failed with status code {response.status_code}")
                             processed_image = None
                             result = {
                                 'name': uploaded_image.name,
                                 'status': 'error',
-                                'message': error_msg,
+                                'message': f"Request failed with status code {response.status_code}",
                                 'image': None,
                                 'detections': [],
                                 'processing_time': time.time() - start_time
@@ -417,12 +316,11 @@ elif tab == "Single Image Detection":
         with st.container():
             col1, col2, col3 = st.columns([2, 1, 2]) 
             with col1:
-                st.image(uploaded_image, caption="Uploaded Image", width=800)
+                st.image(uploaded_image, caption="Uploaded Image", width=800, use_container_width=True)
             
-            # Only show processed image if it was successfully created
-            if analyze_button and 'processed_image' in locals() and processed_image is not None:
+            if analyze_button and (('processed_image' in locals() and processed_image is not None) or (selected_model == "Model 1: YOLOv8n" and 'processed_image' in locals())):
                 with col3:
-                    st.image(processed_image, caption="Processed Image", width=800)
+                    st.image(processed_image, caption="Processed Image", width=800, use_container_width=True)
 
     st.markdown("---")
     st.markdown("Made by Sai Ethihas Chanda | currently hosted at http://127.0.0.1:5000")
@@ -457,66 +355,34 @@ elif tab == "Multiple Image Detection":
                     result = None
                     if selected_model == "Model 1: YOLOv8n":
                         try:
+                            model = YOLO("best_neu.pt")
+                            import cv2
+                            import numpy as np
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                                img = Image.open(uploaded_image)
+                                img.save(tmp_file.name)
+                                tmp_file_path = tmp_file.name
                             try:
-                                model = get_yolo_model("best_neu.pt")
-                            except ImportError as import_err:
+                                results = model(tmp_file_path)
+                                # Convert YOLO output to bytes without creating temp file
+                                output_img = results[0].plot()
+                                output_pil = Image.fromarray(output_img[..., ::-1])
+                                # Save to bytes buffer instead of file
+                                buffer = io.BytesIO()
+                                output_pil.save(buffer, format="JPEG")
+                                buffer.seek(0)
+                                processed_image = Image.open(io.BytesIO(buffer.getvalue()))
                                 with col1:
-                                    st.error(f"❌ YOLOv8n unavailable: {str(import_err)}\n\nTry Model 2 (DSL-YOLO) or Model 3 instead.")
-                                result = {
-                                    'name': uploaded_image.name,
-                                    'status': 'error',
-                                    'message': f"YOLOv8n import failed: {str(import_err)}",
-                                    'image': None,
-                                    'detections': [],
-                                    'processing_time': time.time() - start_time
-                                }
-                                model = None
-                            
-                            if model is not None:
-                                import cv2
-                                import numpy as np
-                                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-                                    img = Image.open(uploaded_image)
-                                    img.save(tmp_file.name)
-                                    tmp_file_path = tmp_file.name
+                                    st.success("YOLOv8n processing successful!")
+                                
+                            finally:
                                 try:
-                                    results = model(tmp_file_path)
-                                    # Convert YOLO output to bytes without creating temp file
-                                    output_img = results[0].plot()
-                                    output_pil = Image.fromarray(output_img[..., ::-1])
-                                    # Save to bytes buffer instead of file
-                                    buffer = io.BytesIO()
-                                    output_pil.save(buffer, format="JPEG")
-                                    buffer.seek(0)
-                                    processed_image = Image.open(io.BytesIO(buffer.getvalue()))
-                                    with col1:
-                                        st.success("YOLOv8n processing successful!")
-                                    result = {
-                                        'name': uploaded_image.name,
-                                        'status': 'success',
-                                        'message': "YOLOv8n processing successful!",
-                                        'image': processed_image,
-                                        'detections': [],
-                                        'processing_time': time.time() - start_time
-                                    }
-                                    
-                                finally:
-                                    try:
-                                        safe_unlink(tmp_file_path)
-                                    except Exception as e:
-                                        pass  # Silently ignore
+                                    safe_unlink(tmp_file_path)
+                                except Exception as e:
+                                    pass  # Silently ignore
                         except Exception as e:
-                            if result is None or result.get('status') != 'error':
-                                with col1:
-                                    st.error(f"Local YOLOv8n processing failed: {str(e)}")
-                                result = {
-                                    'name': uploaded_image.name,
-                                    'status': 'error',
-                                    'message': f"Local YOLOv8n processing failed: {str(e)}",
-                                    'image': None,
-                                    'detections': [],
-                                    'processing_time': time.time() - start_time
-                                }
+                            with col1:
+                                st.error(f"Local YOLOv8n processing failed: {str(e)}")
                         
                         
                     elif selected_model == "Model 2: DSL-YOLO":
@@ -538,25 +404,13 @@ elif tab == "Multiple Image Detection":
                                     'processing_time': time.time() - start_time
                                 }
                             else:
-                                # Try to get error message from JSON response
-                                error_msg = f"Request failed with status code {response.status_code}"
-                                try:
-                                    error_data = response.json()
-                                    if 'error' in error_data:
-                                        error_msg = error_data['error']
-                                except:
-                                    pass
-                                
                                 with col1:
-                                    if response.status_code == 503:
-                                        st.error(f"❌ Model 2 (DSL-YOLO) unavailable for {uploaded_image.name}: {error_msg}")
-                                    else:
-                                        st.error(f"❌ Model 2 (DSL-YOLO) failed for {uploaded_image.name}: {error_msg}")
+                                    st.error(f"Request failed for {uploaded_image.name} with status code {response.status_code}")
                                 processed_image = None
                                 result = {
                                     'name': uploaded_image.name,
                                     'status': 'error',
-                                    'message': error_msg,
+                                    'message': f"Request failed for {uploaded_image.name} with status code {response.status_code}",
                                     'image': None,
                                     'detections': [],
                                     'processing_time': time.time() - start_time
@@ -578,8 +432,9 @@ elif tab == "Multiple Image Detection":
                             # API call for Custom YOLOv8
                             files = {'image': (uploaded_image.name, uploaded_image, uploaded_image.type)}
                             response = requests.post(url, files=files)
-                            
+                            #response_data = response.json()
                             if response.status_code == 200:
+                                
                                 with col1:
                                     st.success(f"Custom Metal Detector YOLO successful for {uploaded_image.name}!")
                                 processed_image = Image.open(io.BytesIO(response.content))
@@ -592,30 +447,7 @@ elif tab == "Multiple Image Detection":
                                     'detections':[],
                                     'processing_time': time.time() - start_time
                                 }
-                            else:
-                                # Try to get error message from JSON response
-                                error_msg = f"Request failed with status code {response.status_code}"
-                                try:
-                                    error_data = response.json()
-                                    if 'error' in error_data:
-                                        error_msg = error_data['error']
-                                except:
-                                    pass
-                                
-                                with col1:
-                                    if response.status_code == 503:
-                                        st.error(f"❌ Model 3 (Custom YOLOv8) unavailable for {uploaded_image.name}: {error_msg}")
-                                    else:
-                                        st.error(f"❌ Model 3 (Custom YOLOv8) failed for {uploaded_image.name}: {error_msg}")
-                                processed_image = None
-                                result = {
-                                    'name': uploaded_image.name,
-                                    'status': 'error',
-                                    'message': error_msg,
-                                    'image': None,
-                                    'detections': None,
-                                    'processing_time': time.time() - start_time
-                                }
+                            
 
                         except Exception as e:
                             with col1:
@@ -637,10 +469,10 @@ elif tab == "Multiple Image Detection":
                     with st.container():
                         col1, col2, col3 = st.columns([2, 1, 2])
                         with col1:
-                            st.image(uploaded_image, caption=f"Uploaded Image: {uploaded_image.name}", width=800)
+                            st.image(uploaded_image, caption=f"Uploaded Image: {uploaded_image.name}", width=800, use_container_width=True)
                         if processed_image is not None:
                             with col3:
-                                st.image(processed_image, caption=f"Processed Image: {uploaded_image.name}", width=800)
+                                st.image(processed_image, caption=f"Processed Image: {uploaded_image.name}", width=800, use_container_width=True)
 
 # Tab 4: Results
 elif tab == "Results":
@@ -689,7 +521,7 @@ elif tab == "Results":
         # Display table
         st.subheader("Detailed Results")
         df = pd.DataFrame(table_data)
-        st.dataframe(df)
+        st.dataframe(df, use_container_width=True)
 
         # Calculate metrics
         total_images = len(st.session_state.results)
@@ -747,7 +579,7 @@ elif tab == "Results":
             line_color='#36A2EB',  # Blue line color
             marker=dict(size=8)  # Size of data point markers
         )
-        st.plotly_chart(fig)
+        st.plotly_chart(fig, use_container_width=True)
 
         
 
