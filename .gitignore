@@ -43,8 +43,9 @@ venv.bak/
 
 *.xml
 
-# Allow local ultralytics folder (custom modifications)
-!ultralytics/
+# Keep local ultralytics folder (has custom models)
+# But exclude the pip-installed version if present
+__pycache__/ultralytics/
 
 # Data Files
 *.csv

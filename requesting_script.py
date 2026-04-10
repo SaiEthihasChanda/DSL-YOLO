@@ -5,6 +5,11 @@ import sys
 import zipfile
 import os
 import warnings
+
+# Set environment variables for headless mode before any cv2 imports
+os.environ['HEADLESS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+
 from PIL import Image
 from ultralytics import YOLO
 import tempfile
@@ -13,7 +18,6 @@ import base64
 import pandas as pd
 import plotly.express as px
 import threading
-#import retryingdfrgr
 
 # Suppress warnings
 # warnings.filterwarnings("ignore")
