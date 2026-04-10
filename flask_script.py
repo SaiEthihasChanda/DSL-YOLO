@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import os
 import numpy as np
 from werkzeug.utils import secure_filename
@@ -492,6 +492,48 @@ def handle_zip_folder():
 
     
 
+
+
+@app.route('/normal', methods=['POST'])
+def dsl_normal():
+    """Simple YOLO prediction without SVM (Model 2: DSL-YOLO)"""
+    cv2 = get_cv2()
+    model = get_model()
+    setup_model_hook()
+    
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        
+        # Read image
+        img = Image.open(file.stream)
+        img_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        
+        # Run YOLO prediction
+        results = model(img_cv2)
+        
+        # Plot results
+        output_img = results[0].plot()
+        output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2RGB)
+        output_pil = Image.fromarray(output_img)
+        
+        # Save to bytes buffer
+        buffer = BytesIO()
+        output_pil.save(buffer, format='JPEG')
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            mimetype='image/jpeg',
+            as_attachment=False,
+            download_name='predicted_image.jpg'
+        )
+    except Exception as e:
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 
 @app.route('/')
