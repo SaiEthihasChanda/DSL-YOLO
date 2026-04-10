@@ -13,56 +13,37 @@ from skimage.measure import shannon_entropy
 from tqdm import tqdm
 import torch
 import joblib
+import sys
 
-# Set environment variables for headless mode FIRST (before any OpenGL-dependent imports)
-if 'QT_QPA_PLATFORM' not in os.environ:
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-if 'DISPLAY' not in os.environ:
-    os.environ['DISPLAY'] = ''
+# Set environment variables for headless mode FIRST
 os.environ['HEADLESS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ['DISPLAY'] = ''
 os.environ['FVCORE_CPU_ONLY'] = '1'
 os.environ['TORCH_HOME'] = '/tmp/torch'
-os.environ['MPLBACKEND'] = 'Agg'  # Non-interactive matplotlib backend
+os.environ['MPLBACKEND'] = 'Agg'
+
+# IMPORTANT: Inject cv2_stub before importing ultralytics
+# This prevents cv2 import errors on headless systems
+try:
+    import cv2
+except ImportError:
+    import cv2_stub as cv2
+    sys.modules['cv2'] = cv2
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Lazy-load heavy dependencies
+# Heavy dependencies - lazy load where possible
 _model = None
-_cv2 = None
 
 def get_cv2():
-    global _cv2
-    if _cv2 is None:
-        try:
-            # Ensure headless environment is set BEFORE import
-            os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-            os.environ['DISPLAY'] = ''
-            os.environ['HEADLESS'] = '1'
-            
-            import cv2
-            # Verify opencv-python-headless is being used (not GUI variant)
-            if hasattr(cv2, '__version__'):
-                print(f"✅ OpenCV {cv2.__version__} loaded successfully (headless)")
-            _cv2 = cv2
-        except ImportError as e:
-            error_str = str(e)
-            if 'libGL' in error_str or 'cannot open shared object' in error_str:
-                # This is the libGL.so.1 headless environment issue
-                raise ImportError(
-                    f"OpenCV GUI variant detected on headless system.\n"
-                    f"Error: {error_str}\n"
-                    f"Solution: The system has opencv-python (GUI) instead of opencv-python-headless.\n"
-                    f"This is a cloud environment issue that models cannot work around.\n"
-                    f"Only image-based models will fail. Try using Streamlit local mode or pure Python models."
-                )
-            else:
-                # Generic import error
-                raise ImportError(f"Failed to import cv2: {error_str}")
-    return _cv2
+    """Return cv2 (either real or stub)"""
+    import cv2  # Already in sys.modules from injection above
+    return cv2
 
 def get_model():
     global _model
