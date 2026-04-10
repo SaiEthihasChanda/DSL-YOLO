@@ -62,10 +62,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# API endpoints
-url = 'http://127.0.0.1:5000/Metal_surface_pred'
-test_url = 'http://127.0.0.1:5000/'
-normal_url = 'http://127.0.0.1:5000/normal'
+# API endpoints - use environment variable FLASK_URL for public deployment
+# Default to localhost for local development
+FLASK_BASE_URL = os.getenv('FLASK_URL', 'http://127.0.0.1:5000')
+url = f'{FLASK_BASE_URL}/Metal_surface_pred'
+test_url = f'{FLASK_BASE_URL}/'
+normal_url = f'{FLASK_BASE_URL}/normal'
 
 # Initialize session state for results
 if 'results' not in st.session_state:
