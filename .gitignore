@@ -38,28 +38,20 @@ venv.bak/
 *.swo
 *~
 .DS_Store
-.streamlit/
-!.streamlit/config.toml
 
 
 *.xml
 
-# Keep local ultralytics folder (has custom models)
-# But exclude the pip-installed version if present
-__pycache__/ultralytics/
 
 # Data Files
 *.csv
 *.xlsx
 *.xls
 *.json
-*.zip
 data/
 Data/
 NEU-DET/
 NEUDETCopy/
-runs/
-uploads/
 
 
 
