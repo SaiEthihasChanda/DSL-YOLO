@@ -7,25 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Union
 
-# Set environment variables for headless environments EARLY
-import os
-os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-os.environ.setdefault('DISPLAY', '')
-os.environ.setdefault('HEADLESS', '1')
-
-# Import cv2 with comprehensive fallback for headless environments
-# This is wrapped to prevent import-time failures on headless systems
-cv2 = None  # Default to None if import fails
-try:
-    import cv2
-except ImportError as e:
-    # cv2 import failed - store error for later handling
-    cv2_import_error = str(e)
-    cv2 = None  # Leave cv2 as None; it will fail when actually used, not at import time
-    # Don't re-raise here - let the code continue, failures will be caught when cv2 is actually used
-    
-# If cv2 import succeeded, we're good. If not, cv2 is None and will raise AttributeError when accessed
-# This allows you to check `if cv2 is None` or catch the error at usage time
+import cv2
 
 from ultralytics.utils import (
     ASSETS,

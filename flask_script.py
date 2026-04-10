@@ -1,71 +1,37 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 import os
+import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
+import numpy as np 
+from flask import send_file
 from io import BytesIO
 from PIL import Image
 import glob
+import cv2
+import os
 import zipfile
 import io
+
 import pandas as pd
+from skimage.filters import sobel
 from skimage.feature import graycomatrix, graycoprops
 from skimage.measure import shannon_entropy
 from tqdm import tqdm
+from ultralytics import YOLO
 import torch
 import joblib
-import sys
-
-# Set environment variables for headless mode FIRST
-os.environ['HEADLESS'] = '1'
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-os.environ['DISPLAY'] = ''
-os.environ['FVCORE_CPU_ONLY'] = '1'
-os.environ['TORCH_HOME'] = '/tmp/torch'
-os.environ['MPLBACKEND'] = 'Agg'
-
-# IMPORTANT: Inject cv2_stub before importing ultralytics
-# This prevents cv2 import errors on headless systems
-try:
-    import cv2
-except ImportError:
-    import cv2_stub as cv2
-    sys.modules['cv2'] = cv2
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Heavy dependencies - lazy load where possible
-_model = None
-
-def get_cv2():
-    """Return cv2 (either real or stub)"""
-    import cv2  # Already in sys.modules from injection above
-    return cv2
-
-def get_model():
-    global _model
-    if _model is None:
-        try:
-            from ultralytics import YOLO
-            _model = YOLO("best_neu.pt")
-        except ImportError as e:
-            raise ImportError(f"Failed to load YOLO model: {str(e)}")
-    return _model
-
-# Initialize hook on first model use
-_hook_handle = None
-def setup_model_hook():
-    global _hook_handle
-    model = get_model()
-    if _hook_handle is None:
-        _hook_handle = model.model.model[-2].register_forward_hook(hook)
-
+model = YOLO("best_neu.pt")
 features = []
 def hook(module, input, output):
     features.append(output)
+hook_handle = model.model.model[-2].register_forward_hook(hook) 
 
 
 CLASS_NAMES = ["crazing", "inclusion","patches","pitted_surface","rolled-in_scale","scratches"]
@@ -105,7 +71,6 @@ def parse_yolo_txt_annotation(txt_path, img_width, img_height):
 
 
 def extract_glcm_features(img):
-    cv2 = get_cv2()
     img = cv2.resize(img, (800, 800))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
@@ -184,10 +149,6 @@ def extract_glcm_features(img):
 
 
 def extract_yolo_features(image):
-    cv2 = get_cv2()
-    model = get_model()
-    setup_model_hook()
-    
     im = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     im = cv2.resize(im, (640, 640))
     im = im.astype(np.float32) / 255.0
@@ -342,108 +303,111 @@ def process_images_folder(image,filename):
 
 @app.route('/Metal_surface_pred', methods=['POST'])
 def process_images():
+    bounding_box_dict = {}
+    image_folder = "uploads"
+    os.makedirs(image_folder, exist_ok=True)
     if 'image' not in request.files:
         return jsonify({'error': 'No image uploaded'}), 400
 
-    # Try to load cv2 and YOLO - these may fail on headless environments
-    try:
-        cv2 = get_cv2()
-    except ImportError as import_err:
-        return jsonify({'error': f'OpenCV unavailable: {str(import_err)}'}), 503
-    
-    try:
-        model = get_model()
-        setup_model_hook()
-    except ImportError as import_err:
-        return jsonify({'error': f'YOLO model unavailable: {str(import_err)}'}), 503
-    
-    # If we got here, cv2 and model are loaded
-    try:
-        bounding_box_dict = {}
-        image_folder = "uploads"
-        os.makedirs(image_folder, exist_ok=True)
+    file = request.files['image']
+    filename = secure_filename(file.filename)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    image_folder = os.path.join(UPLOAD_FOLDER,filename)
+    #print("LOOOOOOOOOOOOOOOOOK HEEEEEEEEEEEEEEEEEEEEEEEEEEEREEEEEEEEE")
+    #print(image_folder)
+    file.save(image_folder)
+    all_data = []
+    all_targets = []
 
-        file = request.files['image']
-        filename = secure_filename(file.filename)
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-        image_folder = os.path.join(UPLOAD_FOLDER,filename)
-        file.save(image_folder)
-        all_data = []
-        all_targets = []
+    for file in tqdm(os.listdir("uploads"), desc="Processing"):
+        if not file.lower().endswith((".jpg", ".jpeg", ".png")):
+            continue
 
-        for file in tqdm(os.listdir("uploads"), desc="Processing"):
-            if not file.lower().endswith((".jpg", ".jpeg", ".png")):
+        filename = os.path.splitext(file)[0]
+        img_path = os.path.join(image_folder)
+        #annot_path = os.path.join(annotation_folder, filename + ".txt")
+
+        original = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if original is None:
+            continue
+
+        h, w = original.shape
+        thermal = convert_to_thermal(original)
+        original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR)
+
+        #gt_boxes, gt_labels = parse_yolo_txt_annotation(annot_path, w, h)
+
+        results = model(original_color, conf=0.05, iou=0.0, agnostic_nms=True)
+        print("________________________________________________________________________")
+        #print(results)
+        det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
+
+        for x1, y1, x2, y2 in det_boxes:
+            norm_crop = original_color[y1:y2, x1:x2]
+            thermal_crop = thermal[y1:y2, x1:x2]
+            
+            if norm_crop.size == 0 or thermal_crop.size == 0:
                 continue
 
-            filename = os.path.splitext(file)[0]
-            img_path = os.path.join(image_folder)
+            yolo_vec = extract_yolo_features(norm_crop)
+            glcm_vec = extract_glcm_features(thermal_crop)
+            row = list(yolo_vec) + list(glcm_vec)
+            all_data.append(row)
 
-            original = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-            if original is None:
-                continue
+    yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
 
-            h, w = original.shape
-            thermal = convert_to_thermal(original)
-            original_color = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR)
+    glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
+             'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
+             'Energy3', 'Corr3', 'Diss_sim3', 'Homogen3','Contrast3', 
+                'Energy4', 'Corr4', 'Diss_sim4', 'Homogen4', 'Contrast4',
+                'Energy5', 'Corr5', 'Diss_sim5', 'Homogen5', 'Contrast5']
+    df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
+    df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
 
-            results = model(original_color, conf=0.05, iou=0.0, agnostic_nms=True)
-            print("________________________________________________________________________")
-            det_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
-
-            for x1, y1, x2, y2 in det_boxes:
-                norm_crop = original_color[y1:y2, x1:x2]
-                thermal_crop = thermal[y1:y2, x1:x2]
-                
-                if norm_crop.size == 0 or thermal_crop.size == 0:
-                    continue
-
-                yolo_vec = extract_yolo_features(norm_crop)
-                glcm_vec = extract_glcm_features(thermal_crop)
-                row = list(yolo_vec) + list(glcm_vec)
-                all_data.append(row)
-
-        yolo_cols = [f"{i}" for i in range(len(yolo_vec))]
-
-        glcm_cols = ['Energy', 'Corr', 'Diss_sim', 'Homogen', 'Contrast',
-                 'Energy2', 'Corr2', 'Diss_sim2', 'Homogen2', 'Contrast2',
-                 'Energy3', 'Corr3', 'Diss_sim3', 'Homogen3','Contrast3', 
-                    'Energy4', 'Corr4', 'Diss_sim4', 'Homogen4', 'Contrast4',
-                    'Energy5', 'Corr5', 'Diss_sim5', 'Homogen5', 'Contrast5']
-        df = pd.DataFrame(all_data, columns=yolo_cols + glcm_cols)
-        df =df.drop(["Corr4","Diss_sim4","Contrast4","Corr5","Diss_sim5","Homogen3","Homogen4","Homogen5","Contrast5","Energy5"],axis=1)
-
-        print("✅ Final feature matrix shape:", df.shape)
-        print(df)
-        scaler = joblib.load("scaler.pkl")
-        pca = joblib.load("pca.pkl")
-        svm_model = joblib.load("svm_model.pkl")
-        le = joblib.load("label_encoder.pkl")
-        
-        X_new = df.drop(columns=["target"], errors='ignore')
-        X_scaled = scaler.transform(X_new)
-        X_pca = pca.transform(X_scaled)
-        
-        predicted_classes = svm_model.predict(X_pca)
-
-        df["svm_pred"] = predicted_classes
-        df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
-        
-        for i,(x1, y1, x2, y2) in enumerate(det_boxes):
-            bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=df["svm_pred_label"].iloc[i]
-        final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
-
-        print("✅ Predictions added to dataframe!")
-        image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(image_rgb)
-
-        buffer = BytesIO()
-        pil_image.save(buffer, format="PNG")
-        buffer.seek(0)
-
-        return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
     
-    except Exception as e:
-        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
+    
+
+
+    
+    #df = pd.DataFrame(all_data)
+    print("✅ Final feature matrix shape:", df.shape)
+    print(df)
+    scaler = joblib.load("scaler.pkl")
+    pca = joblib.load("pca.pkl")
+    svm_model = joblib.load("svm_model.pkl")
+    le = joblib.load("label_encoder.pkl")
+    
+    X_new = df.drop(columns=["target"], errors='ignore')
+
+    
+    X_scaled = scaler.transform(X_new)
+    X_pca = pca.transform(X_scaled)
+    #print(X_pca.head())
+    
+    predicted_classes = svm_model.predict(X_pca)
+
+    
+    df["svm_pred"] = predicted_classes
+    df["svm_pred_label"] = le.inverse_transform(df["svm_pred"])
+    
+    for i,(x1, y1, x2, y2) in enumerate(det_boxes):
+        
+        bounding_box_dict[str(x1)+str(y1)+str(x2)+str(y2)]=df["svm_pred_label"].iloc[i]
+    final_img = draw_boxes_with_labels(image_folder,det_boxes, list(bounding_box_dict.values()))
+    #print(final_img)
+
+    print("✅ Predictions added to dataframe!")
+    image_rgb = cv2.cvtColor(final_img, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(image_rgb)
+
+    
+    buffer = BytesIO()
+    pil_image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    
+    return send_file(buffer, mimetype='image/png', as_attachment=False, download_name='eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png')
 
 
 @app.route('/Metal_surface_pred_folder', methods=['POST'])
@@ -497,57 +461,6 @@ def handle_zip_folder():
 
     
 
-
-
-@app.route('/normal', methods=['POST'])
-def dsl_normal():
-    """Simple YOLO prediction without SVM (Model 2: DSL-YOLO)"""
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image file provided'}), 400
-    
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    # Try to load cv2 and YOLO - these may fail on headless environments
-    try:
-        cv2 = get_cv2()
-    except ImportError as import_err:
-        return jsonify({'error': f'OpenCV unavailable: {str(import_err)}'}), 503
-    
-    try:
-        model = get_model()
-        setup_model_hook()
-    except ImportError as import_err:
-        return jsonify({'error': f'YOLO model unavailable: {str(import_err)}'}), 503
-    
-    # If we got here, cv2 and model are loaded
-    try:
-        # Read image
-        img = Image.open(file.stream)
-        img_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-        
-        # Run YOLO prediction
-        results = model(img_cv2)
-        
-        # Plot results
-        output_img = results[0].plot()
-        output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2RGB)
-        output_pil = Image.fromarray(output_img)
-        
-        # Save to bytes buffer
-        buffer = BytesIO()
-        output_pil.save(buffer, format='JPEG')
-        buffer.seek(0)
-        
-        return send_file(
-            buffer,
-            mimetype='image/jpeg',
-            as_attachment=False,
-            download_name='predicted_image.jpg'
-        )
-    except Exception as e:
-        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 
 @app.route('/')
