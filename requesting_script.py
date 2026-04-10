@@ -223,6 +223,7 @@ elif tab == "Single Image Detection":
             with st.spinner("Analyzing..."):
                 start_time = time.time()
                 result = None
+                processed_image = None
                 if selected_model == "Model 1: YOLOv8n":
                     try:
                         try:
@@ -418,7 +419,8 @@ elif tab == "Single Image Detection":
             with col1:
                 st.image(uploaded_image, caption="Uploaded Image", width=800)
             
-            if analyze_button and (('processed_image' in locals() and processed_image is not None) or (selected_model == "Model 1: YOLOv8n" and 'processed_image' in locals())):
+            # Only show processed image if it was successfully created
+            if analyze_button and 'processed_image' in locals() and processed_image is not None:
                 with col3:
                     st.image(processed_image, caption="Processed Image", width=800)
 
