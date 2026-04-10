@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsl-yolo"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+description = "Metal Surface Defect Detection using YOLO"
+
+[tool.poetry.dependencies]
+python = "^3.12"
