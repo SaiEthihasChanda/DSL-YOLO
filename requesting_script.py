@@ -63,8 +63,8 @@ st.markdown(
 )
 
 # API endpoints - use environment variable FLASK_URL for public deployment
-# Default to Render Flask URL
-FLASK_BASE_URL = os.getenv('FLASK_URL', 'https://dsl-yolo.onrender.com')
+# Default to ngrok URL
+FLASK_BASE_URL = os.getenv('FLASK_URL', 'https://cable-canning-budding.ngrok-free.dev')
 url = f'{FLASK_BASE_URL}/Metal_surface_pred'
 test_url = f'{FLASK_BASE_URL}/'
 normal_url = f'{FLASK_BASE_URL}/normal'
