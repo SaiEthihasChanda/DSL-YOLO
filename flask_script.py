@@ -14,11 +14,16 @@ from tqdm import tqdm
 import torch
 import joblib
 
-# Set environment variables for headless mode
+# Set environment variables for headless mode FIRST (before any OpenGL-dependent imports)
+if 'QT_QPA_PLATFORM' not in os.environ:
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+if 'DISPLAY' not in os.environ:
+    os.environ['DISPLAY'] = ''
 os.environ['HEADLESS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-os.environ['DISPLAY'] = ''
+os.environ['FVCORE_CPU_ONLY'] = '1'
+os.environ['TORCH_HOME'] = '/tmp/torch'
+os.environ['MPLBACKEND'] = 'Agg'  # Non-interactive matplotlib backend
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -33,10 +38,30 @@ def get_cv2():
     global _cv2
     if _cv2 is None:
         try:
+            # Ensure headless environment is set BEFORE import
+            os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+            os.environ['DISPLAY'] = ''
+            os.environ['HEADLESS'] = '1'
+            
             import cv2
+            # Verify opencv-python-headless is being used (not GUI variant)
+            if hasattr(cv2, '__version__'):
+                print(f"✅ OpenCV {cv2.__version__} loaded successfully (headless)")
             _cv2 = cv2
         except ImportError as e:
-            raise ImportError(f"Failed to import cv2: {str(e)}. This is a known issue on Streamlit Cloud due to missing system libraries (libGL.so.1). Make sure opencv-python-headless is installed.")
+            error_str = str(e)
+            if 'libGL' in error_str or 'cannot open shared object' in error_str:
+                # This is the libGL.so.1 headless environment issue
+                raise ImportError(
+                    f"OpenCV GUI variant detected on headless system.\n"
+                    f"Error: {error_str}\n"
+                    f"Solution: The system has opencv-python (GUI) instead of opencv-python-headless.\n"
+                    f"This is a cloud environment issue that models cannot work around.\n"
+                    f"Only image-based models will fail. Try using Streamlit local mode or pure Python models."
+                )
+            else:
+                # Generic import error
+                raise ImportError(f"Failed to import cv2: {error_str}")
     return _cv2
 
 def get_model():
@@ -336,21 +361,26 @@ def process_images_folder(image,filename):
 
 @app.route('/Metal_surface_pred', methods=['POST'])
 def process_images():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    # Try to load cv2 and YOLO - these may fail on headless environments
     try:
-        # Check for cv2 import first
-        try:
-            cv2 = get_cv2()
-            model = get_model()
-            setup_model_hook()
-        except ImportError as import_err:
-            error_msg = f"OpenCV import failed on this environment: {str(import_err)}"
-            return jsonify({'error': error_msg}), 503  # Service Unavailable
-        
+        cv2 = get_cv2()
+    except ImportError as import_err:
+        return jsonify({'error': f'OpenCV unavailable: {str(import_err)}'}), 503
+    
+    try:
+        model = get_model()
+        setup_model_hook()
+    except ImportError as import_err:
+        return jsonify({'error': f'YOLO model unavailable: {str(import_err)}'}), 503
+    
+    # If we got here, cv2 and model are loaded
+    try:
         bounding_box_dict = {}
         image_folder = "uploads"
         os.makedirs(image_folder, exist_ok=True)
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image uploaded'}), 400
 
         file = request.files['image']
         filename = secure_filename(file.filename)
@@ -491,22 +521,27 @@ def handle_zip_folder():
 @app.route('/normal', methods=['POST'])
 def dsl_normal():
     """Simple YOLO prediction without SVM (Model 2: DSL-YOLO)"""
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image file provided'}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    # Try to load cv2 and YOLO - these may fail on headless environments
     try:
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image file provided'}), 400
-        
-        file = request.files['image']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        
-        try:
-            cv2 = get_cv2()
-            model = get_model()
-            setup_model_hook()
-        except ImportError as import_err:
-            error_msg = f"OpenCV import failed on this environment: {str(import_err)}"
-            return jsonify({'error': error_msg}), 503  # Service Unavailable
-        
+        cv2 = get_cv2()
+    except ImportError as import_err:
+        return jsonify({'error': f'OpenCV unavailable: {str(import_err)}'}), 503
+    
+    try:
+        model = get_model()
+        setup_model_hook()
+    except ImportError as import_err:
+        return jsonify({'error': f'YOLO model unavailable: {str(import_err)}'}), 503
+    
+    # If we got here, cv2 and model are loaded
+    try:
         # Read image
         img = Image.open(file.stream)
         img_cv2 = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
