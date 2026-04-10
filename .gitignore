@@ -7,7 +7,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-ultralytics/
 downloads/
 eggs/
 .eggs/
@@ -44,6 +43,8 @@ venv.bak/
 
 *.xml
 
+# Allow local ultralytics folder (custom modifications)
+!ultralytics/
 
 # Data Files
 *.csv
