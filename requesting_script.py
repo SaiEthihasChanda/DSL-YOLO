@@ -151,7 +151,6 @@ if tab == "Welcome":
                 r"C:\Users\saiet\OneDrive\Desktop\stream\logo.jpg",
                 width=300,
                 caption=None,
-                use_container_width=True,
                 clamp=True,
                 output_format="auto"
             )
@@ -348,11 +347,11 @@ elif tab == "Single Image Detection":
         with st.container():
             col1, col2, col3 = st.columns([2, 1, 2]) 
             with col1:
-                st.image(uploaded_image, caption="Uploaded Image", width=800, use_container_width=True)
+                st.image(uploaded_image, caption="Uploaded Image", width=800)
             
             if analyze_button and (('processed_image' in locals() and processed_image is not None) or (selected_model == "Model 1: YOLOv8n" and 'processed_image' in locals())):
                 with col3:
-                    st.image(processed_image, caption="Processed Image", width=800, use_container_width=True)
+                    st.image(processed_image, caption="Processed Image", width=800)
 
     st.markdown("---")
     st.markdown("Made by Sai Ethihas Chanda | currently hosted at http://127.0.0.1:5000")
@@ -501,10 +500,10 @@ elif tab == "Multiple Image Detection":
                     with st.container():
                         col1, col2, col3 = st.columns([2, 1, 2])
                         with col1:
-                            st.image(uploaded_image, caption=f"Uploaded Image: {uploaded_image.name}", width=800, use_container_width=True)
+                            st.image(uploaded_image, caption=f"Uploaded Image: {uploaded_image.name}", width=800)
                         if processed_image is not None:
                             with col3:
-                                st.image(processed_image, caption=f"Processed Image: {uploaded_image.name}", width=800, use_container_width=True)
+                                st.image(processed_image, caption=f"Processed Image: {uploaded_image.name}", width=800)
 
 # Tab 4: Results
 elif tab == "Results":
@@ -553,7 +552,7 @@ elif tab == "Results":
         # Display table
         st.subheader("Detailed Results")
         df = pd.DataFrame(table_data)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df)
 
         # Calculate metrics
         total_images = len(st.session_state.results)
@@ -611,7 +610,7 @@ elif tab == "Results":
             line_color='#36A2EB',  # Blue line color
             marker=dict(size=8)  # Size of data point markers
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
 
         
 
