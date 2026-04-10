@@ -7,14 +7,23 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Union
 
-# Import cv2 with headless fallback for Streamlit Cloud
+# Import cv2 with comprehensive fallback for headless environments
+import sys
 try:
     import cv2
-except ImportError:
-    # Fallback for headless environments (Streamlit Cloud)
-    import os
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    import cv2
+except ImportError as e:
+    # Fallback 1: Try with offscreen mode
+    if "libGL" in str(e) or "cannot open shared object" in str(e):
+        import os
+        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+        os.environ['DISPLAY'] = ''
+        try:
+            import cv2
+        except Exception as fallback_error:
+            # Fallback 2: Try opencv-python-headless if still failing
+            raise ImportError(f"Failed to import cv2: {e}\n{fallback_error}\nMake sure opencv-python-headless is installed.")
+    else:
+        raise
 
 from ultralytics.utils import (
     ASSETS,
