@@ -77,6 +77,32 @@ def resize(src, dsize, interpolation=None):
         return np.array(img_resized)
     return src
 
+def warpAffine(src, M, dsize):
+    """Warp image affine (stub - returns src unchanged)"""
+    return src
+
+def getRotationMatrix2D(center, angle, scale):
+    """Get rotation matrix (stub)"""
+    return np.eye(2, 3, dtype=np.float32)
+
+def getMat(size, dtype):
+    """Create matrix/array"""
+    return np.zeros(size, dtype=dtype)
+
+def inRange(src, lowerb, upperb):
+    """Color range filtering (stub - returns binary same shape)"""
+    if isinstance(src, np.ndarray):
+        return np.ones(src.shape[:2], dtype=np.uint8) * 255
+    return src
+
+def findContours(src, mode, method):
+    """Find contours (stub - returns empty list)"""
+    return []
+
+def drawContours(img, contours, contourIdx, color, thickness):
+    """Draw contours (stub - returns img unchanged)"""
+    return img
+
 def putText(img, text, org, fontFace, fontScale, color, thickness=1):
     """Add text to image (stub - returns img unchanged)"""
     return img
@@ -92,6 +118,89 @@ def circle(img, center, radius, color, thickness=1):
 def line(img, pt1, pt2, color, thickness=1):
     """Draw line (stub - returns img unchanged)"""
     return img
+
+def polylines(img, pts, isClosed, color, thickness=1):
+    """Draw polylines (stub - returns img unchanged)"""
+    return img
+
+def ellipse(img, center, axes, angle, startAngle, endAngle, color, thickness=1):
+    """Draw ellipse (stub - returns img unchanged)"""
+    return img
+
+def arrowedLine(img, pt1, pt2, color, thickness=1, tipLength=0.1):
+    """Draw arrow (stub - returns img unchanged)"""
+    return img
+
+def bilateralFilter(src, d, sigmaColor, sigmaSpace):
+    """Bilateral filter (stub - returns src unchanged)"""
+    return src
+
+def GaussianBlur(src, ksize, sigmaX, sigmaY=None):
+    """Gaussian blur (stub - returns src unchanged)"""
+    return src
+
+def medianBlur(src, ksize):
+    """Median blur (stub - returns src unchanged)"""
+    return src
+
+def morphologyEx(src, op, kernel, iterations=1):
+    """Morphology operation (stub - returns src unchanged)"""
+    return src
+
+def Canny(image, threshold1, threshold2, apertureSize=3, L2gradient=False):
+    """Canny edge detection (stub - returns edges)"""
+    if isinstance(image, np.ndarray):
+        return np.zeros_like(image, dtype=np.uint8)
+    return image
+
+def split(m):
+    """Split multi-channel image"""
+    if isinstance(m, np.ndarray):
+        if len(m.shape) == 3:
+            return [m[:, :, i] for i in range(m.shape[2])]
+        else:
+            return [m]
+    return [m]
+
+def merge(mv):
+    """Merge channels"""
+    if isinstance(mv, (list, tuple)) and len(mv) > 0:
+        return np.stack(mv, axis=-1)
+    return mv[0] if mv else None
+
+def floodFill(image, seedPoint, newVal):
+    """Flood fill (stub - returns image unchanged)"""
+    return image
+
+def moments(contour):
+    """Calculate moments (stub - returns empty dict)"""
+    return {}
+
+def matchTemplate(image, templ, method):
+    """Template matching (stub - returns zeros array)"""
+    if isinstance(image, np.ndarray) and isinstance(templ, np.ndarray):
+        h, w = image.shape[:2]
+        th, tw = templ.shape[:2]
+        if w >= tw and h >= th:
+            return np.zeros((h - th + 1, w - tw + 1), dtype=np.float32)
+    return np.array([], dtype=np.float32).reshape(0, 0)
+
+# OpenCV configuration functions (stubs)
+def setNumThreads(nthreads):
+    """Stub: Set number of threads for OpenCV operations"""
+    pass
+
+def getNumThreads():
+    """Stub: Get number of threads"""
+    return 1
+
+def setUseOptimized(onoff):
+    """Stub: Enable/disable optimizations"""
+    pass
+
+def useOptimized():
+    """Stub: Check if optimizations enabled"""
+    return True
 
 # Default empty values for compatibility
 CASCADE_CLASSIFIER_POOL = None
