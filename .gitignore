@@ -39,6 +39,7 @@ venv.bak/
 *~
 .DS_Store
 .streamlit/
+!.streamlit/config.toml
 
 
 *.xml
