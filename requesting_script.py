@@ -5,6 +5,12 @@ import sys
 import zipfile
 import os
 import warnings
+import tempfile
+import time
+import base64
+import pandas as pd
+import plotly.express as px
+import threading
 
 # Set environment variables for headless mode BEFORE any cv2 imports
 os.environ['HEADLESS'] = '1'
@@ -13,13 +19,15 @@ os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 os.environ['DISPLAY'] = ''
 
 from PIL import Image
-from ultralytics import YOLO
-import tempfile
-import time
-import base64
-import pandas as pd
-import plotly.express as px
-import threading
+
+# LAZY LOAD YOLO - only import when needed to avoid OpenGL errors
+_yolo_model = None
+def get_yolo_model(model_path="best_neu.pt"):
+    global _yolo_model
+    if _yolo_model is None:
+        from ultralytics import YOLO
+        _yolo_model = YOLO(model_path)
+    return _yolo_model
 
 # Suppress warnings
 # warnings.filterwarnings("ignore")
@@ -196,7 +204,7 @@ elif tab == "Single Image Detection":
                 result = None
                 if selected_model == "Model 1: YOLOv8n":
                     try:
-                        model = YOLO("best_neu.pt")
+                        model = get_yolo_model("best_neu.pt")
                         import cv2
                         import numpy as np
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
@@ -386,7 +394,7 @@ elif tab == "Multiple Image Detection":
                     result = None
                     if selected_model == "Model 1: YOLOv8n":
                         try:
-                            model = YOLO("best_neu.pt")
+                            model = get_yolo_model("best_neu.pt")
                             import cv2
                             import numpy as np
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
