@@ -235,8 +235,9 @@ elif tab == "Single Image Detection":
                                 'processing_time': time.time() - start_time
                             }
                             st.session_state.results.append(result)
+                            model = None
                         
-                        if result is None:  # Proceed only if import succeeded
+                        if model is not None:
                             import cv2
                             import numpy as np
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
@@ -263,11 +264,11 @@ elif tab == "Single Image Detection":
                                     'detections': [],
                                     'processing_time': time.time() - start_time
                                 }
-                        finally:
-                            try:
-                                safe_unlink(tmp_file_path)
-                            except Exception as e:
-                                pass  # Silently ignore
+                            finally:
+                                try:
+                                    safe_unlink(tmp_file_path)
+                                except Exception as e:
+                                    pass  # Silently ignore
                     except Exception as e:
                         with col1:
                             st.error(f"Local YOLOv8n processing failed: {str(e)}")
