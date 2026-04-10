@@ -7,7 +7,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Union
 
-import cv2
+# Import cv2 with headless fallback for Streamlit Cloud
+try:
+    import cv2
+except ImportError:
+    # Fallback for headless environments (Streamlit Cloud)
+    import os
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+    import cv2
 
 from ultralytics.utils import (
     ASSETS,

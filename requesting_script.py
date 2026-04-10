@@ -6,9 +6,11 @@ import zipfile
 import os
 import warnings
 
-# Set environment variables for headless mode before any cv2 imports
+# Set environment variables for headless mode BEFORE any cv2 imports
 os.environ['HEADLESS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ['DISPLAY'] = ''
 
 from PIL import Image
 from ultralytics import YOLO

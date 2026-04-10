@@ -13,4 +13,4 @@ pyyaml==6.0.1
 tqdm==4.66.4
 flask==2.3.3
 werkzeug==2.3.7
-opencv-python-headless==4.10.0.84
+opencv-python-headless==4.10.0.84 ; python_version >= "3.7"
